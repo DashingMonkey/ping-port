@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "identifier": "default",
+  "description": "Default capabilities for PingPort",
+  "windows": ["main", "pp-api-reference"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position",
+    "core:window:allow-is-maximized",
+    "core:webview:allow-create-webview-window",
+    "shell:allow-open",
+    "window-state:allow-restore-state",
+    "window-state:allow-save-window-state"
+  ]
+}

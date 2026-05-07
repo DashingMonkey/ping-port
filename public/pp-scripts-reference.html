@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en" data-i18n-lang>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="title">pp Scripts Reference</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #ffffff;
+      --surface: #f8f9fa;
+      --border: #e5e7eb;
+      --text: #111827;
+      --text-secondary: #4b5563;
+      --text-muted: #9ca3af;
+      --accent: #2563eb;
+      --accent-subtle: #eff6ff;
+      --pre-bg: #f1f5f9;
+      --badge-green-bg: #ecfdf5;
+      --badge-green-text: #065f46;
+      --badge-blue-bg: #eff6ff;
+      --badge-blue-text: #1e40af;
+      --badge-amber-bg: #fffbeb;
+      --badge-amber-text: #92400e;
+      --method-color: #1e40af;
+      --string-color: #047857;
+      --comment-color: #6b7280;
+      --keyword-color: #7c3aed;
+      --prop-color: #0f172a;
+    }
+
+    html.dark {
+      --bg: #0f1117;
+      --surface: #161822;
+      --border: #262833;
+      --text: #e4e4e7;
+      --text-secondary: #a1a1aa;
+      --text-muted: #52525b;
+      --accent: #60a5fa;
+      --accent-subtle: #1e293b;
+      --pre-bg: #1a1d2e;
+      --badge-green-bg: #064e3b;
+      --badge-green-text: #6ee7b7;
+      --badge-blue-bg: #1e3a5f;
+      --badge-blue-text: #93c5fd;
+      --badge-amber-bg: #4a3a1a;
+      --badge-amber-text: #fcd34d;
+      --method-color: #93c5fd;
+      --string-color: #6ee7b7;
+      --comment-color: #6b7280;
+      --keyword-color: #c4b5fd;
+      --prop-color: #e4e4e7;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 24px 20px;
+      font-size: 13px;
+      line-height: 1.6;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    .page-header {
+      margin-bottom: 28px;
+    }
+    .page-header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .page-header p {
+      font-size: 12.5px;
+      color: var(--text-secondary);
+    }
+
+    /* === Intro Cards === */
+    .intro-grid {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+    .intro-card {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+    .intro-card h3 {
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+    .intro-card p {
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    /* === API Group === */
+    .api-group {
+      margin-bottom: 24px;
+    }
+    .api-group-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .api-group-header h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    }
+    .badge {
+      font-size: 10px;
+      font-weight: 500;
+      padding: 1px 7px;
+      border-radius: 10px;
+      white-space: nowrap;
+      line-height: 1.6;
+    }
+    .badge-green { background: var(--badge-green-bg); color: var(--badge-green-text); }
+    .badge-blue  { background: var(--badge-blue-bg);  color: var(--badge-blue-text); }
+    .badge-amber { background: var(--badge-amber-bg); color: var(--badge-amber-text); }
+
+    .api-group-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+    }
+
+    /* === Method Table === */
+    .method-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 10px;
+    }
+    .method-table td {
+      padding: 5px 0;
+      vertical-align: top;
+      font-size: 12.5px;
+    }
+    .method-table td:first-child {
+      width: 1%;
+      white-space: nowrap;
+      padding-right: 14px;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px;
+      color: var(--method-color);
+      font-weight: 500;
+    }
+    .method-table td:last-child {
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+    .method-table td:last-child code {
+      font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 11px;
+      background: var(--surface);
+      padding: 1px 4px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    /* === Code Example === */
+    .code-block {
+      background: var(--pre-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px;
+      line-height: 1.65;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .code-block .cmt { color: var(--comment-color); }
+    .code-block .kw  { color: var(--keyword-color); }
+    .code-block .str { color: var(--string-color); }
+    .code-block .fn  { color: var(--method-color); }
+
+    hr.divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <h1 data-i18n="title">pp Scripts Reference</h1>
+    <p data-i18n="subtitle">JavaScript API for Pre-request and Test scripts</p>
+  </div>
+
+  <!-- Intro: script types -->
+  <div class="intro-grid">
+    <div class="intro-card">
+      <h3 data-i18n="pre_request_script">Pre-request Script</h3>
+      <p data-i18n="pre_request_desc1">Runs <strong>before</strong> the HTTP request. Use it to set variables, modify the URL, or add query parameters.</p>
+      <p style="margin-top:4px"><span class="badge badge-blue" data-i18n="available">available</span> <span data-i18n="pre_request_tools">pp.variables &middot; pp.request (write) &middot; console &middot; pp.sleep</span></p>
+    </div>
+    <div class="intro-card">
+      <h3 data-i18n="test_script">Test Script</h3>
+      <p data-i18n="test_script_desc1">Runs <strong>after</strong> the response. Use it to assert status codes, validate the body, or inspect headers.</p>
+      <p style="margin-top:4px"><span class="badge badge-green" data-i18n="available">available</span> <span data-i18n="test_script_tools">pp.variables &middot; pp.request (read) &middot; pp.response &middot; pp.test &middot; console &middot; pp.sleep</span></p>
+    </div>
+  </div>
+
+  <!-- ========= pp.variables ========= -->
+  <div class="api-group">
+    <div class="api-group-header">
+      <h2>pp.variables</h2>
+      <span class="badge badge-green" data-i18n="pre_request">Pre-request</span>
+      <span class="badge badge-blue" data-i18n="test">Test</span>
+    </div>
+    <p class="api-group-desc" data-i18n="variables_desc">
+      A key-value store shared between Pre-request and Test scripts. Values persist across both scripts within the same request.
+    </p>
+    <table class="method-table">
+      <tr><td>get(key)</td>         <td data-i18n="variables_get">Returns the value for <code>key</code>, or <code>undefined</code> if not set</td></tr>
+      <tr><td>set(key, value)</td>  <td data-i18n="variables_set">Stores a value under <code>key</code></td></tr>
+      <tr><td>unset(key)</td>       <td data-i18n="variables_unset">Removes <code>key</code> and its value</td></tr>
+    </table>
+    <div class="code-block"><span class="cmt">// Pre-request</span>
+<span class="fn">pp.variables.set</span>(<span class="str">"token"</span>, <span class="str">"Bearer eyJhbGciOi..."</span>);
+<span class="fn">pp.variables.set</span>(<span class="str">"userId"</span>, <span class="str">"42"</span>);
+
+<span class="cmt">// Test</span>
+<span class="kw">const</span> token = <span class="fn">pp.variables.get</span>(<span class="str">"token"</span>);  <span class="cmt">// "Bearer eyJhbGciOi..."</span>
+<span class="kw">const</span> uid   = <span class="fn">pp.variables.get</span>(<span class="str">"userId"</span>); <span class="cmt">// "42"</span>
+<span class="fn">console.log</span>(token);
+<span class="fn">pp.variables.unset</span>(<span class="str">"userId"</span>);</div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ========= pp.request ========= -->
+  <div class="api-group">
+    <div class="api-group-header">
+      <h2>pp.request</h2>
+      <span class="badge badge-amber" data-i18n="pre_request_write">Pre-request (write)</span>
+      <span class="badge badge-blue" data-i18n="test_read">Test (read)</span>
+    </div>
+    <p class="api-group-desc" data-i18n="request_desc">
+      Read and modify the outgoing HTTP request. In Test scripts the request has already been sent, so methods like <code>setUrl</code> have no effect there.
+    </p>
+    <table class="method-table">
+      <tr><td>getUrl()</td>               <td data-i18n="request_getUrl">Returns the full URL string</td></tr>
+      <tr><td>setUrl(url)</td>            <td data-i18n="request_setUrl">Replaces the entire URL</td></tr>
+      <tr><td>addQueryParam(key, value)</td>  <td data-i18n="request_addQueryParam">Appends a query parameter</td></tr>
+      <tr><td>getQueryParam(key)</td>     <td data-i18n="request_getQueryParam">Returns the value of a query param, or <code>undefined</code></td></tr>
+      <tr><td>hasQueryParam(key)</td>     <td data-i18n="request_hasQueryParam">Returns <code>true</code> if the param exists</td></tr>
+      <tr><td>removeQueryParam(key)</td>  <td data-i18n="request_removeQueryParam">Removes the query parameter</td></tr>
+    </table>
+    <div class="code-block"><span class="cmt">// Read query params set in the URL bar</span>
+<span class="kw">const</span> page = <span class="fn">pp.request.getQueryParam</span>(<span class="str">"page"</span>);  <span class="cmt">// "1"</span>
+<span class="kw">const</span> sort = <span class="fn">pp.request.getQueryParam</span>(<span class="str">"sort"</span>);  <span class="cmt">// "desc"</span>
+
+<span class="cmt">// Pre-request: add dynamic params</span>
+<span class="fn">pp.request.addQueryParam</span>(<span class="str">"timestamp"</span>, <span class="kw">Date.now</span>().<span class="fn">toString</span>());
+<span class="fn">console.log</span>(<span class="fn">pp.request.getUrl</span>());
+<span class="cmt">// https://api.example.com/users?page=1&sort=desc&timestamp=1714392000000</span></div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ========= pp.response ========= -->
+  <div class="api-group">
+    <div class="api-group-header">
+      <h2>pp.response</h2>
+      <span class="badge badge-green" data-i18n="test_only">Test only</span>
+    </div>
+    <p class="api-group-desc" data-i18n="response_desc">
+      Inspect the HTTP response. Available <strong>only</strong> in Test scripts — in Pre-request scripts these fields are empty/zero.
+    </p>
+    <table class="method-table">
+      <tr><td>status</td>     <td data-i18n="response_status">HTTP status code, e.g. <code>200</code></td></tr>
+      <tr><td>body</td>       <td data-i18n="response_body">Response body as a raw string</td></tr>
+      <tr><td>headers</td>    <td data-i18n="response_headers">Response headers object, e.g. <code>pp.response.headers["content-type"]</code></td></tr>
+      <tr><td>time</td>       <td data-i18n="response_time">Response time in milliseconds</td></tr>
+      <tr><td>json()</td>     <td data-i18n="response_json">Returns the body as a JSON string if valid, or <code>null</code>. Use <code>JSON.parse(pp.response.json())</code> to get an object.</td></tr>
+    </table>
+    <div class="code-block"><span class="cmt">// Test script</span>
+<span class="kw">const</span> data = <span class="fn">JSON.parse</span>(<span class="fn">pp.response.json</span>());
+<span class="fn">console.log</span>(<span class="str">"Status:"</span>, <span class="fn">pp.response.status</span>);
+<span class="fn">console.log</span>(<span class="str">"Took:"</span>,   <span class="fn">pp.response.time</span>, <span class="str">"ms"</span>);
+<span class="fn">console.log</span>(<span class="str">"Content-Type:"</span>, <span class="fn">pp.response.headers</span>[<span class="str">"content-type"</span>]);
+
+<span class="fn">pp.expect</span>(<span class="fn">pp.response.status</span>).<span class="fn">toEqual</span>(<span class="str">200</span>);
+<span class="fn">pp.expect</span>(data.users.<span class="fn">length</span>).<span class="fn">toBeGreaterThan</span>(<span class="str">0</span>);</div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ========= pp.test / pp.expect ========= -->
+  <div class="api-group">
+    <div class="api-group-header">
+      <h2>pp.test &amp; pp.expect</h2>
+      <span class="badge badge-green" data-i18n="test_only">Test only</span>
+    </div>
+    <p class="api-group-desc" data-i18n="test_desc">
+      Define test cases that appear in the <strong>Test Results</strong> tab. Each <code>pp.test</code> block reports pass/fail with its duration.
+    </p>
+    <table class="method-table">
+      <tr><td>pp.test(name, fn)</td>    <td data-i18n="test_pptest">Register a named test case. If <code>fn</code> throws, the test fails.</td></tr>
+      <tr><td>pp.expect(actual)</td>    <td data-i18n="test_ppexpect">Returns an assertion object with chainable methods (see below)</td></tr>
+    </table>
+    <p style="font-size:12px;color:var(--text-secondary);margin-top:6px;font-weight:600" data-i18n="test_assertions_header">Assertion methods on <code style="font-family:monospace">pp.expect(actual)</code>:</p>
+    <table class="method-table" style="margin-bottom:10px">
+      <tr><td>.toEqual(expected)</td>       <td data-i18n="test_toEqual">String equality (deep-equal not supported)</td></tr>
+      <tr><td>.toBe(expected)</td>          <td data-i18n="test_toBe">Alias for <code>.toEqual</code></td></tr>
+      <tr><td>.toContain(substring)</td>    <td data-i18n="test_toContain">Checks whether the string contains <code>substring</code></td></tr>
+      <tr><td>.toBeTruthy()</td>            <td data-i18n="test_toBeTruthy">Passes for non-empty, non-zero, non-null strings</td></tr>
+      <tr><td>.toBeFalsy()</td>             <td data-i18n="test_toBeFalsy">Passes for empty, "0", "null", "undefined"</td></tr>
+      <tr><td>.toBeGreaterThan(n)</td>      <td data-i18n="test_toBeGreaterThan">Numeric greater-than comparison</td></tr>
+      <tr><td>.toBeLessThan(n)</td>         <td data-i18n="test_toBeLessThan">Numeric less-than comparison</td></tr>
+    </table>
+    <div class="code-block"><span class="cmt">// Test script</span>
+<span class="fn">pp.test</span>(<span class="str">"Status is 200"</span>, () => {
+  <span class="fn">pp.expect</span>(<span class="fn">pp.response.status</span>).<span class="fn">toEqual</span>(<span class="str">200</span>);
+});
+
+<span class="fn">pp.test</span>(<span class="str">"Response is JSON"</span>, () => {
+  <span class="fn">pp.expect</span>(<span class="fn">pp.response.headers</span>[<span class="str">"content-type"</span>]).<span class="fn">toContain</span>(<span class="str">"json"</span>);
+});
+
+<span class="fn">pp.test</span>(<span class="str">"Body has users array"</span>, () => {
+  <span class="kw">const</span> data = <span class="fn">JSON.parse</span>(<span class="fn">pp.response.json</span>());
+  <span class="fn">pp.expect</span>(data.users.<span class="fn">length</span>).<span class="fn">toBeGreaterThan</span>(<span class="str">0</span>);
+});</div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ========= pp.sleep / console ========= -->
+  <div class="api-group">
+    <div class="api-group-header">
+      <h2>pp.sleep &amp; console</h2>
+      <span class="badge badge-green" data-i18n="pre_request">Pre-request</span>
+      <span class="badge badge-blue" data-i18n="test">Test</span>
+    </div>
+    <p class="api-group-desc" data-i18n="util_desc">
+      Utilities available in both script types.
+    </p>
+    <table class="method-table">
+      <tr><td>pp.sleep(ms)</td>         <td data-i18n="util_sleep">Pauses execution for <code>ms</code> milliseconds (capped at 5000)</td></tr>
+      <tr><td>console.log(...)</td>     <td data-i18n="util_log">Prints to the Console tab (default color)</td></tr>
+      <tr><td>console.info(...)</td>    <td data-i18n="util_info">Prints to the Console tab (green)</td></tr>
+      <tr><td>console.warn(...)</td>    <td data-i18n="util_warn">Prints to the Console tab (yellow)</td></tr>
+      <tr><td>console.error(...)</td>   <td data-i18n="util_error">Prints to the Console tab (red)</td></tr>
+    </table>
+    <div class="code-block"><span class="fn">console.log</span>(<span class="str">"Request URL:"</span>, <span class="fn">pp.request.getUrl</span>());
+<span class="fn">console.info</span>(<span class="str">"All good"</span>);
+<span class="fn">console.warn</span>(<span class="str">"Deprecated header used"</span>);
+<span class="fn">console.error</span>(<span class="str">"Missing required param"</span>);
+
+<span class="cmt">// Wait 1 second between retries</span>
+<span class="fn">pp.sleep</span>(<span class="str">1000</span>);</div>
+  </div>
+
+  <script>
+    (function() {
+      // --- i18n ---
+      var I18N = {
+        en: {
+          title: 'pp Scripts Reference',
+          subtitle: 'JavaScript API for Pre-request and Test scripts',
+          pre_request_script: 'Pre-request Script',
+          pre_request_desc1: 'Runs <strong>before</strong> the HTTP request. Use it to set variables, modify the URL, or add query parameters.',
+          pre_request_tools: 'pp.variables &middot; pp.request (write) &middot; console &middot; pp.sleep',
+          test_script: 'Test Script',
+          test_script_desc1: 'Runs <strong>after</strong> the response. Use it to assert status codes, validate the body, or inspect headers.',
+          test_script_tools: 'pp.variables &middot; pp.request (read) &middot; pp.response &middot; pp.test &middot; console &middot; pp.sleep',
+          available: 'available',
+          pre_request: 'Pre-request',
+          test: 'Test',
+          pre_request_write: 'Pre-request (write)',
+          test_read: 'Test (read)',
+          test_only: 'Test only',
+          variables_desc: 'A key-value store shared between Pre-request and Test scripts. Values persist across both scripts within the same request.',
+          variables_get: 'Returns the value for <code>key</code>, or <code>undefined</code> if not set',
+          variables_set: 'Stores a value under <code>key</code>',
+          variables_unset: 'Removes <code>key</code> and its value',
+          request_desc: 'Read and modify the outgoing HTTP request. In Test scripts the request has already been sent, so methods like <code>setUrl</code> have no effect there.',
+          request_getUrl: 'Returns the full URL string',
+          request_setUrl: 'Replaces the entire URL',
+          request_addQueryParam: 'Appends a query parameter',
+          request_getQueryParam: 'Returns the value of a query param, or <code>undefined</code>',
+          request_hasQueryParam: 'Returns <code>true</code> if the param exists',
+          request_removeQueryParam: 'Removes the query parameter',
+          response_desc: 'Inspect the HTTP response. Available <strong>only</strong> in Test scripts — in Pre-request scripts these fields are empty/zero.',
+          response_status: 'HTTP status code, e.g. <code>200</code>',
+          response_body: 'Response body as a raw string',
+          response_headers: 'Response headers object, e.g. <code>pp.response.headers["content-type"]</code>',
+          response_time: 'Response time in milliseconds',
+          response_json: 'Returns the body as a JSON string if valid, or <code>null</code>. Use <code>JSON.parse(pp.response.json())</code> to get an object.',
+          test_desc: 'Define test cases that appear in the <strong>Test Results</strong> tab. Each <code>pp.test</code> block reports pass/fail with its duration.',
+          test_pptest: 'Register a named test case. If <code>fn</code> throws, the test fails.',
+          test_ppexpect: 'Returns an assertion object with chainable methods (see below)',
+          test_assertions_header: 'Assertion methods on <code style="font-family:monospace">pp.expect(actual)</code>:',
+          test_toEqual: 'String equality (deep-equal not supported)',
+          test_toBe: 'Alias for <code>.toEqual</code>',
+          test_toContain: 'Checks whether the string contains <code>substring</code>',
+          test_toBeTruthy: 'Passes for non-empty, non-zero, non-null strings',
+          test_toBeFalsy: 'Passes for empty, "0", "null", "undefined"',
+          test_toBeGreaterThan: 'Numeric greater-than comparison',
+          test_toBeLessThan: 'Numeric less-than comparison',
+          util_desc: 'Utilities available in both script types.',
+          util_sleep: 'Pauses execution for <code>ms</code> milliseconds (capped at 5000)',
+          util_log: 'Prints to the Console tab (default color)',
+          util_info: 'Prints to the Console tab (green)',
+          util_warn: 'Prints to the Console tab (yellow)',
+          util_error: 'Prints to the Console tab (red)',
+        },
+        zh: {
+          title: 'pp API 参考',
+          subtitle: '用于预请求和测试脚本的 JavaScript API',
+          pre_request_script: '预请求脚本',
+          pre_request_desc1: '在 HTTP 请求发送<strong>之前</strong>运行。用于设置变量、修改 URL 或添加查询参数。',
+          pre_request_tools: 'pp.variables &middot; pp.request (写入) &middot; console &middot; pp.sleep',
+          test_script: '测试脚本',
+          test_script_desc1: '在收到响应<strong>之后</strong>运行。用于断言状态码、验证响应体或检查请求头。',
+          test_script_tools: 'pp.variables &middot; pp.request (读取) &middot; pp.response &middot; pp.test &middot; console &middot; pp.sleep',
+          available: '可用',
+          pre_request: '预请求',
+          test: '测试',
+          pre_request_write: '预请求 (写入)',
+          test_read: '测试 (读取)',
+          test_only: '仅测试',
+          variables_desc: '预请求和测试脚本之间共享的键值存储。在同一请求中，两个脚本之间的值会持久保留。',
+          variables_get: '返回 <code>key</code> 对应的值，未设置时返回 <code>undefined</code>',
+          variables_set: '将值存储在 <code>key</code> 下',
+          variables_unset: '移除 <code>key</code> 及其值',
+          request_desc: '读取和修改待发送的 HTTP 请求。在测试脚本中请求已发送，因此 <code>setUrl</code> 等方法不会生效。',
+          request_getUrl: '返回完整的 URL 字符串',
+          request_setUrl: '替换整个 URL',
+          request_addQueryParam: '追加一个查询参数',
+          request_getQueryParam: '返回查询参数的值，不存在时返回 <code>undefined</code>',
+          request_hasQueryParam: '参数存在时返回 <code>true</code>',
+          request_removeQueryParam: '移除查询参数',
+          response_desc: '检查 HTTP 响应。<strong>仅</strong>在测试脚本中可用 — 在预请求脚本中这些字段为空/零。',
+          response_status: 'HTTP 状态码，如 <code>200</code>',
+          response_body: '响应体原始字符串',
+          response_headers: '响应头对象，如 <code>pp.response.headers["content-type"]</code>',
+          response_time: '响应时间（毫秒）',
+          response_json: '如果有效则返回 JSON 字符串，否则返回 <code>null</code>。使用 <code>JSON.parse(pp.response.json())</code> 获取对象。',
+          test_desc: '定义显示在<strong>测试结果</strong>标签页中的测试用例。每个 <code>pp.test</code> 块会报告通过/失败及其耗时。',
+          test_pptest: '注册一个命名测试用例。如果 <code>fn</code> 抛出异常，测试失败。',
+          test_ppexpect: '返回一个可链式调用的断言对象（见下文）',
+          test_assertions_header: '<code style="font-family:monospace">pp.expect(actual)</code> 的断言方法：',
+          test_toEqual: '字符串相等（不支持深度相等）',
+          test_toBe: '<code>.toEqual</code> 的别名',
+          test_toContain: '检查字符串是否包含 <code>substring</code>',
+          test_toBeTruthy: '对非空、非零、非 null 字符串通过',
+          test_toBeFalsy: '对空字符串、"0"、"null"、"undefined" 通过',
+          test_toBeGreaterThan: '数值大于比较',
+          test_toBeLessThan: '数值小于比较',
+          util_desc: '两种脚本类型均可使用的工具方法。',
+          util_sleep: '暂停执行 <code>ms</code> 毫秒（上限 5000）',
+          util_log: '输出到控制台标签页（默认颜色）',
+          util_info: '输出到控制台标签页（绿色）',
+          util_warn: '输出到控制台标签页（黄色）',
+          util_error: '输出到控制台标签页（红色）',
+        }
+      };
+
+      function getLang() {
+        var stored = localStorage.getItem('pingport-settings');
+        if (stored) {
+          try {
+            var settings = JSON.parse(stored);
+            if (settings.language === 'zh') return 'zh';
+          } catch (e) {}
+        }
+        return 'en';
+      }
+
+      function applyLang(lang) {
+        var t = I18N[lang] || I18N.en;
+        document.documentElement.setAttribute('lang', lang);
+        document.title = t.title;
+        var els = document.querySelectorAll('[data-i18n]');
+        for (var i = 0; i < els.length; i++) {
+          var key = els[i].getAttribute('data-i18n');
+          if (key && t[key]) {
+            els[i].innerHTML = t[key];
+          }
+        }
+      }
+
+      var lang = getLang();
+      applyLang(lang);
+
+      // --- theme ---
+      function applyTheme(settings) {
+        if (settings && settings.theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      }
+
+      var stored = localStorage.getItem('pingport-settings');
+      if (stored) {
+        try { applyTheme(JSON.parse(stored)); } catch (e) {}
+      }
+
+      window.addEventListener('storage', function(e) {
+        if (e.key === 'pingport-settings') {
+          try {
+            var settings = JSON.parse(e.newValue || '{}');
+            applyTheme(settings);
+            var newLang = settings.language === 'zh' ? 'zh' : 'en';
+            applyLang(newLang);
+          } catch (err) {}
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

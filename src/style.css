@@ -1,0 +1,156 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+
+  --color-surface-deep: var(--surface-deep);
+  --color-surface-base: var(--surface-base);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-active: var(--surface-active);
+  --color-border-default: var(--border-default);
+  --color-border-focus: var(--border-focus);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --color-info: var(--info);
+  --color-primary-50: #f0f9ff;
+  --color-primary-100: #e0f2fe;
+  --color-primary-200: #bae6fd;
+  --color-primary-300: #7dd3fc;
+  --color-primary-400: #38bdf8;
+  --color-primary-500: #0ea5e9;
+  --color-primary-600: #0284c7;
+  --color-primary-700: #0369a1;
+  --color-primary-800: #075985;
+  --color-primary-900: #0c4a6e;
+
+  --animate-pulse-ring: pulse-ring 1s ease-out infinite;
+  --animate-fade-in: fade-in 150ms ease-out;
+  --animate-slide-up: slide-up 200ms ease-out;
+
+  --shadow-glow-cyan: 0 0 0 3px rgba(34, 211, 238, 0.15);
+  --shadow-glow-emerald: 0 0 8px rgba(52, 211, 153, 0.3);
+  --shadow-glow-rose: 0 0 8px rgba(248, 113, 113, 0.3);
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.4); }
+  70% { box-shadow: 0 0 0 8px rgba(34, 211, 238, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0); }
+}
+
+@keyframes fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes slide-up {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@variant dark (&:is(.dark *));
+
+:root {
+  --duration-fast: 100ms;
+  --duration-normal: 150ms;
+  --duration-slow: 250ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* VSCode Light Theme */
+  --surface-deep: #F9F9F9;
+  --surface-base: #FFFFFF;
+  --surface-elevated: #e8e8e8;
+  --surface-active: #007acc;
+  --border-default: #cccccc;
+  --border-focus: #007acc;
+  --text-primary: #000000;
+  --text-secondary: #4d4d4d;
+  --text-muted: #6b6b6b;
+  --accent: #007acc;
+  --success: #4ec9b0;
+  --warning: #9d7a0a;
+  --error: #f14c4c;
+  --info: #569cd6;
+
+  /* Scrollbar */
+  --scrollbar-thumb: #c1c1c1;
+  --scrollbar-thumb-hover: #a0a0a0;
+}
+
+/* VSCode Dark Theme */
+.dark {
+  --surface-deep: #262626;
+  --surface-base: #212121;
+  --surface-elevated: #3b3b3b;
+  --surface-active: #007acc;
+  --border-default: #454545;
+  --border-focus: #007acc;
+  --text-primary: #cccccc;
+  --text-secondary: #cccccc;
+  --text-muted: #9d9d9d;
+  --accent: #007acc;
+  --success: #4ec9b0;
+  --warning: #dcdcaa;
+  --error: #f14c4c;
+  --info: #569cd6;
+
+  /* Scrollbar */
+  --scrollbar-thumb: #424242;
+  --scrollbar-thumb-hover: #4f4f4f;
+}
+
+/* Global focus ring override */
+*:focus-visible {
+  outline: none;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface-deep);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Selection color - VSCode Light */
+:root ::selection {
+  background: rgba(0, 122, 204, 0.3);
+  color: #000000;
+}
+
+/* Selection color - VSCode Dark */
+.dark ::selection {
+  background: rgba(0, 122, 204, 0.4);
+  color: #ffffff;
+}
+
+/* CSS variable transitions for smooth theme switching */
+*, *::before, *::after {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow, opacity;
+  transition-duration: 150ms;
+  transition-timing-function: ease;
+}
