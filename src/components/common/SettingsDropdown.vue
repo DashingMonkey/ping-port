@@ -1,11 +1,22 @@
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import { Popover, PopoverButton, PopoverPanel } from '@headlessui/vue'
 import { useI18n } from 'vue-i18n'
+import { getVersion } from '@tauri-apps/api/app'
 import { useSettingsStore } from '../../stores/settings'
 import type { Language } from '../../i18n'
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
+
+const appVersion = ref('')
+onMounted(async () => {
+  try {
+    appVersion.value = await getVersion()
+  } catch {
+    appVersion.value = ''
+  }
+})
 
 const languages: { value: Language; label: string }[] = [
   { value: 'en', label: 'English' },
@@ -53,6 +64,11 @@ function setLanguage(lang: Language) {
             {{ lang.label }}
           </button>
         </div>
+      </div>
+
+      <!-- Version -->
+      <div v-if="appVersion" class="border-t border-border-default mt-2 pt-2 text-center">
+        <span class="text-[10px] text-text-muted">v{{ appVersion }}</span>
       </div>
     </PopoverPanel>
   </Popover>

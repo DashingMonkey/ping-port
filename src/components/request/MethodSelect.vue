@@ -11,7 +11,7 @@ const emit = defineEmits<{
   'update:modelValue': [method: HttpMethod]
 }>()
 
-const methods: HttpMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
+const methods: HttpMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD']
 
 const methodColors: Record<HttpMethod, string> = {
   GET: 'text-success',

@@ -51,7 +51,8 @@ fn get_db<'a>(
 pub fn get_collections(state: State<'_, Mutex<AppState>>) -> Result<Vec<Collection>, String> {
     let app_state = get_db(&state)?;
     let db: &Database = &app_state.db;
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn_guard = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn = conn_guard.as_ref().ok_or("Database is closed".to_string())?;
 
     let mut stmt = conn
         .prepare("SELECT id, name, type, parent_id, COALESCE(position, 0), created_at, updated_at FROM collections ORDER BY position ASC, created_at DESC")
@@ -83,7 +84,8 @@ pub fn create_collection(
 ) -> Result<Collection, String> {
     let app_state = get_db(&state)?;
     let db: &Database = &app_state.db;
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn_guard = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn = conn_guard.as_ref().ok_or("Database is closed".to_string())?;
 
     let now = chrono::Utc::now().to_rfc3339();
     let id = input.id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
@@ -95,7 +97,7 @@ pub fn create_collection(
             params![input.parent_id],
             |row| row.get(0),
         )
-        .unwrap_or(0);
+        .map_err(|e| e.to_string())?;
 
     conn.execute(
         "INSERT INTO collections (id, name, type, parent_id, position, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -121,13 +123,27 @@ pub fn update_collection(
 ) -> Result<(), String> {
     let app_state = get_db(&state)?;
     let db: &Database = &app_state.db;
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn_guard = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn = conn_guard.as_ref().ok_or("Database is closed".to_string())?;
 
     let now = chrono::Utc::now().to_rfc3339();
 
-    let name = input.name.ok_or("name is required")?;
-    let kind = input.kind;
-    let parent_id = input.parent_id;
+    let current = conn.query_row(
+        "SELECT name, type, parent_id FROM collections WHERE id = ?1",
+        params![input.id],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
+        },
+    )
+    .map_err(|e| format!("Collection not found: {}", e))?;
+
+    let name = input.name.unwrap_or(current.0);
+    let kind = input.kind.or(current.1);
+    let parent_id = input.parent_id.or(current.2);
 
     conn.execute(
         "UPDATE collections SET name = ?1, type = ?2, parent_id = ?3, updated_at = ?4 WHERE id = ?5",
@@ -142,7 +158,8 @@ pub fn update_collection(
 pub fn delete_collection(id: String, state: State<'_, Mutex<AppState>>) -> Result<(), String> {
     let app_state = get_db(&state)?;
     let db: &Database = &app_state.db;
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn_guard = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn = conn_guard.as_ref().ok_or("Database is closed".to_string())?;
 
     conn.execute("DELETE FROM collections WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -157,7 +174,8 @@ pub fn reorder_collections(
 ) -> Result<(), String> {
     let app_state = get_db(&state)?;
     let db: &Database = &app_state.db;
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn_guard = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn = conn_guard.as_ref().ok_or("Database is closed".to_string())?;
 
     // Get source and target positions
     let source_pos: i32 = conn
@@ -188,13 +206,13 @@ pub fn reorder_collections(
     // Shift other collections
     if source_pos < target_pos {
         conn.execute(
-            "UPDATE collections SET position = position - 1, updated_at = ?1 WHERE position > ?2 AND position <= ?3 AND id != ?4",
+            "UPDATE collections SET position = position - 1, updated_at = ?1 WHERE position > ?2 AND position <= ?3 AND id != ?4 AND parent_id IS (SELECT parent_id FROM collections WHERE id = ?4)",
             params![now, source_pos, target_pos, input.source_id],
         )
         .map_err(|e| e.to_string())?;
     } else {
         conn.execute(
-            "UPDATE collections SET position = position + 1, updated_at = ?1 WHERE position >= ?2 AND position < ?3 AND id != ?4",
+            "UPDATE collections SET position = position + 1, updated_at = ?1 WHERE position >= ?2 AND position < ?3 AND id != ?4 AND parent_id IS (SELECT parent_id FROM collections WHERE id = ?4)",
             params![now, target_pos, source_pos, input.source_id],
         )
         .map_err(|e| e.to_string())?;

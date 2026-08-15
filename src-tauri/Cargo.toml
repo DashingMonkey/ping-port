@@ -1,6 +1,6 @@
 [package]
 name = "pingport"
-version = "1.0.2"
+version = "1.0.3"
 description = "A lightweight API debugging tool"
 authors = ["PingPort Team"]
 edition = "2021"
@@ -22,7 +22,7 @@ tokio = { version = "1", features = ["full"] }
 rusqlite = { version = "0.39.0", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
-reqwest = { version = "0.13", features = ["json", "multipart"] }
+reqwest = { version = "0.13", features = ["json", "multipart", "form"] }
 log = "0.4"
 env_logger = "0.11"
 anyhow = "1"

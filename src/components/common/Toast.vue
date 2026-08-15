@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps<{
   message: string
@@ -12,6 +12,8 @@ const emit = defineEmits<{
 }>()
 
 const isVisible = ref(false)
+let dismissTimer: ReturnType<typeof setTimeout> | null = null
+let closeTimer: ReturnType<typeof setTimeout> | null = null
 
 onMounted(() => {
   // Trigger enter animation
@@ -21,15 +23,20 @@ onMounted(() => {
 
   // Auto dismiss
   if (props.duration !== 0) {
-    setTimeout(() => {
+    dismissTimer = setTimeout(() => {
       handleClose()
     }, props.duration || 3000)
   }
 })
 
+onUnmounted(() => {
+  if (dismissTimer) clearTimeout(dismissTimer)
+  if (closeTimer) clearTimeout(closeTimer)
+})
+
 function handleClose() {
   isVisible.value = false
-  setTimeout(() => emit('close'), 200)
+  closeTimer = setTimeout(() => emit('close'), 200)
 }
 
 const icons = {

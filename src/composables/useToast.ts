@@ -18,11 +18,18 @@ interface ToastInstance {
 const toasts = shallowRef<ToastInstance[]>([])
 let nextId = 0
 
+function repositionToasts() {
+  const els = document.querySelectorAll('.pp-toast')
+  els.forEach((el, index) => {
+    ;(el as HTMLElement).style.bottom = `${16 + index * 60}px`
+  })
+}
+
 function showToast(options: ToastOptions): number {
   const id = nextId++
   const el = document.createElement('div')
+  el.classList.add('pp-toast')
   el.style.position = 'fixed'
-  el.style.bottom = '16px'
   el.style.right = '16px'
   el.style.zIndex = '9999'
   document.body.appendChild(el)
@@ -44,6 +51,7 @@ function showToast(options: ToastOptions): number {
     onClose: () => removeToast(id),
   })
   render(vnode, el)
+  repositionToasts()
 
   return id
 }
@@ -57,6 +65,7 @@ function removeToast(id: number) {
     render(null, instance.container)
     document.body.removeChild(instance.container)
     toasts.value = toasts.value.filter(t => t.id !== id)
+    repositionToasts()
   }
 }
 

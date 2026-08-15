@@ -33,7 +33,7 @@ const isHtml = computed(() => {
 
 const isXml = computed(() => {
   const trimmed = props.body.trim()
-  return trimmed.startsWith('<?xml') || trimmed.startsWith('<')
+  return trimmed.startsWith('<?xml') || (trimmed.startsWith('<') && !isHtml.value && trimmed.includes('</'))
 })
 
 const contentTypeKey = computed(() => {

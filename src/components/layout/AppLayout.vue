@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, watch, onUnmounted } from "vue";
 import AppHeader from "./AppHeader.vue";
 import ActivityBar from "./ActivityBar.vue";
 import AppSidebar from "./AppSidebar.vue";
@@ -55,6 +55,11 @@ async function stopResize() {
   document.removeEventListener("mouseup", stopResize);
   settingsStore.setSidebarWidth(currentWidth.value);
 }
+
+onUnmounted(() => {
+  document.removeEventListener("mousemove", onResize);
+  document.removeEventListener("mouseup", stopResize);
+});
 </script>
 
 <template>

@@ -70,8 +70,14 @@ const response = ref<HttpResponse | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const activeTab = ref<"params" | "headers" | "body" | "auth" | "scripts">(
-  "params",
+  tabsStore.activeTab ? tabsStore.getSubTab(tabsStore.activeTab.id) : "params",
 );
+
+// Remember the selected sub-tab so it survives top-level tab switches (remounts)
+watch(activeTab, (val) => {
+  const id = tabsStore.activeTab?.id;
+  if (id) tabsStore.setSubTab(id, val);
+});
 const scriptVariables = ref<Record<string, string>>({});
 const testResults = ref<TestResult[]>([]);
 const consoleLogs = ref<string[]>([]);
@@ -129,7 +135,7 @@ watch(
   requestState,
   (newState) => {
     if (currentDraftId.value) {
-      tabsStore.updateDraftState(currentDraftId.value, { ...newState });
+      tabsStore.updateDraftState(currentDraftId.value, JSON.parse(JSON.stringify(newState)));
       tabsStore.markDirty(currentDraftId.value);
     }
   },
@@ -417,6 +423,7 @@ async function runTestScript(
 async function sendRequest() {
   if (!requestState.url.trim()) {
     error.value = t('request.urlRequired');
+    response.value = null;
     return;
   }
 
@@ -535,6 +542,14 @@ async function sendRequest() {
   }
 }
 
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
 function handleUrlUpdate(url: string) {
   const queryIndex = url.indexOf("?");
   if (queryIndex !== -1) {
@@ -546,8 +561,8 @@ function handleUrlUpdate(url: string) {
       const [key, ...valueParts] = pair.split("=");
       if (key) {
         params.push({
-          key: decodeURIComponent(key),
-          value: decodeURIComponent(valueParts.join("=")),
+          key: safeDecode(key),
+          value: safeDecode(valueParts.join("=")),
           enabled: true,
         });
       }
@@ -654,9 +669,7 @@ async function saveNewRequest() {
     collectionsStore.expandToCollection(selectedCollectionId.value);
 
     // Select the newly created request in sidebar
-    collectionsStore.selectedRequests.clear();
-    collectionsStore.selectedRequests.add(created.id);
-    collectionsStore.selectedRequests = new Set(collectionsStore.selectedRequests);
+    collectionsStore.selectedRequests = new Set([created.id]);
 
     toast.success(t('request.saved'), 1000);
   } catch (e) {
@@ -739,6 +752,7 @@ onUnmounted(() => {
         :title="requestTitle"
         :collection-id="selectedCollectionId"
         :collections="collectionsStore.collections"
+        :loading="loading"
         @update:model-value="handleUrlUpdate"
         @update:method="handleMethodUpdate"
         @update:title="handleTitleUpdate"

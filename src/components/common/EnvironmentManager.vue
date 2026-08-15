@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEnvironmentsStore, type Environment } from '../../stores/environments'
 import { confirmDelete } from '../../composables/useConfirm'
+import { toast } from '../../composables/useToast'
 import VariableTable from './VariableTable.vue'
 
 const { t } = useI18n()
@@ -51,6 +52,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('click', closeContextMenu)
+  document.removeEventListener('mousemove', onDrag)
+  document.removeEventListener('mouseup', stopDrag)
 })
 
 const selectedEnv = computed(() => {
@@ -70,30 +73,42 @@ function selectEnv(id: string) {
 
 async function createNewEnv() {
   if (!newEnvName.value.trim()) return
-  const created = await environmentsStore.createEnvironment({
-    name: newEnvName.value.trim(),
-    variables: {}
-  })
-  newEnvName.value = ''
-  showNewEnvInput.value = false
-  selectedEnvId.value = created.id
+  try {
+    const created = await environmentsStore.createEnvironment({
+      name: newEnvName.value.trim(),
+      variables: {}
+    })
+    newEnvName.value = ''
+    showNewEnvInput.value = false
+    selectedEnvId.value = created.id
+  } catch (e) {
+    toast.error(t('environment.createFailed'))
+  }
 }
 
 async function deleteEnv(id: string) {
   if (id === GLOBAL_ENV_ID) return
   if (!await confirmDelete(t('environment.deleteConfirm'))) return
-  await environmentsStore.deleteEnvironment(id)
-  if (selectedEnvId.value === id) {
-    selectedEnvId.value = null
+  try {
+    await environmentsStore.deleteEnvironment(id)
+    if (selectedEnvId.value === id) {
+      selectedEnvId.value = null
+    }
+  } catch (e) {
+    toast.error(t('environment.deleteFailed'))
   }
 }
 
 async function updateEnvName(env: Environment, newName: string) {
   if (!newName.trim() || env.id === GLOBAL_ENV_ID) return
-  await environmentsStore.updateEnvironment({
-    id: env.id,
-    name: newName.trim()
-  })
+  try {
+    await environmentsStore.updateEnvironment({
+      id: env.id,
+      name: newName.trim()
+    })
+  } catch (e) {
+    toast.error(t('environment.updateFailed'))
+  }
   editingEnvId.value = null
 }
 
@@ -131,33 +146,45 @@ async function handleAddVariable(envId: string, key: string, value: string) {
   const env = environmentsStore.environments.find(e => e.id === envId)
   if (!env) return
   const newVars = { ...env.variables, [key.trim()]: value }
-  await environmentsStore.updateEnvironment({ id: envId, variables: newVars })
+  try {
+    await environmentsStore.updateEnvironment({ id: envId, variables: newVars })
+  } catch (e) {
+    toast.error(t('environment.updateFailed'))
+  }
 }
 
 async function deleteVariable(envId: string, key: string) {
-  await environmentsStore.deleteEnvironmentVariable(envId, key)
+  try {
+    await environmentsStore.deleteEnvironmentVariable(envId, key)
+  } catch (e) {
+    toast.error(t('environment.updateFailed'))
+  }
 }
 
 async function updateVariable(envId: string, oldKey: string, newKey: string, value: string) {
   const env = environmentsStore.environments.find(e => e.id === envId)
   if (!env) return
 
-  if (oldKey === 'REORDER') {
-    const newOrder: Record<string, string>[] = JSON.parse(value)
-    const reordered: Record<string, string> = {}
-    for (const item of newOrder) {
-      reordered[item.key] = item.value
+  try {
+    if (oldKey === 'REORDER') {
+      const newOrder: Record<string, string>[] = JSON.parse(value)
+      const reordered: Record<string, string> = {}
+      for (const item of newOrder) {
+        reordered[item.key] = item.value
+      }
+      await environmentsStore.updateEnvironment({ id: envId, variables: reordered })
+      return
     }
-    await environmentsStore.updateEnvironment({ id: envId, variables: reordered })
-    return
-  }
 
-  const newVars = { ...env.variables }
-  if (oldKey !== newKey) {
-    delete newVars[oldKey]
+    const newVars = { ...env.variables }
+    if (oldKey !== newKey) {
+      delete newVars[oldKey]
+    }
+    newVars[newKey] = value
+    await environmentsStore.updateEnvironment({ id: envId, variables: newVars })
+  } catch (e) {
+    toast.error(t('environment.updateFailed'))
   }
-  newVars[newKey] = value
-  await environmentsStore.updateEnvironment({ id: envId, variables: newVars })
 }
 
 // Resize handlers - for whole modal split

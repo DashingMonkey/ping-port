@@ -33,7 +33,7 @@ function transformFromRust(env: RustEnvironment): Environment {
   }
 }
 
-const SETTINGS_KEY = 'pingport-settings'
+const SETTINGS_KEY = 'pingport-env-settings'
 
 interface PingPortSettings {
   activeEnvId?: string | null
@@ -156,44 +156,83 @@ export const useEnvironmentsStore = defineStore('environments', () => {
   }
 
   const createEnvironment = async (input: CreateEnvironmentInput): Promise<Environment> => {
-    const rustInput = {
-      name: input.name,
-      variables: input.variables || {},
+    try {
+      const rustInput = {
+        name: input.name,
+        variables: input.variables || {},
+      }
+      const result = await invoke<RustEnvironment>('create_environment', { input: rustInput })
+      const environment = transformFromRust(result)
+      environments.value.push(environment)
+      return environment
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e)
+      throw e
     }
-    const result = await invoke<RustEnvironment>('create_environment', { input: rustInput })
-    const environment = transformFromRust(result)
-    environments.value.unshift(environment)
-    return environment
   }
 
   const updateEnvironment = async (input: UpdateEnvironmentInput): Promise<void> => {
-    const rustInput = {
-      id: input.id,
-      name: input.name || null,
-      variables: input.variables !== undefined ? input.variables : null,
-    }
-    await invoke('update_environment', { input: rustInput })
-    const index = environments.value.findIndex(env => env.id === input.id)
-    if (index !== -1) {
-      const existing = environments.value[index]
-      environments.value[index] = {
-        ...existing,
-        name: input.name ?? existing.name,
-        variables: input.variables !== undefined ? input.variables : existing.variables,
+    try {
+      const rustInput = {
+        id: input.id,
+        name: input.name !== undefined ? input.name : null,
+        variables: input.variables !== undefined ? input.variables : null,
       }
+      await invoke('update_environment', { input: rustInput })
+      const index = environments.value.findIndex(env => env.id === input.id)
+      if (index !== -1) {
+        const existing = environments.value[index]
+        environments.value[index] = {
+          ...existing,
+          name: input.name ?? existing.name,
+          variables: input.variables !== undefined ? input.variables : existing.variables,
+        }
+      }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e)
+      throw e
     }
   }
 
   const deleteEnvironment = async (id: string): Promise<void> => {
-    await invoke('delete_environment', { id })
-    environments.value = environments.value.filter(env => env.id !== id)
+    try {
+      await invoke('delete_environment', { id })
+      environments.value = environments.value.filter(env => env.id !== id)
+
+      // If deleted env was active, clear active
+      if (activeEnvId.value === id) {
+        setActiveEnvironment(null)
+      }
+
+      // Clean up collection preferences
+      Object.keys(collectionPreferences.value).forEach(colId => {
+        if (collectionPreferences.value[colId] === id) {
+          delete collectionPreferences.value[colId]
+        }
+      })
+
+      // Clean up tab overrides
+      Object.keys(tabOverrides.value).forEach(tabId => {
+        if (tabOverrides.value[tabId] === id) {
+          delete tabOverrides.value[tabId]
+        }
+      })
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e)
+      throw e
+    }
   }
 
   const deleteEnvironmentVariable = async (envId: string, key: string): Promise<void> => {
-    await invoke('delete_environment_variable', { envId, key })
-    const env = environments.value.find(e => e.id === envId)
-    if (env) {
-      delete env.variables[key]
+    try {
+      await invoke('delete_environment_variable', { envId, key })
+      const env = environments.value.find(e => e.id === envId)
+      if (env) {
+        delete env.variables[key]
+      }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e)
+      throw e
     }
   }
 

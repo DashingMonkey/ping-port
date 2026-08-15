@@ -44,10 +44,7 @@ pub struct ExecuteScriptOutput {
 
 #[tauri::command]
 pub async fn execute_script(input: String) -> Result<String, String> {
-    log::info!(
-        "Executing script with input: {}",
-        &input[..input.len().min(100)]
-    );
+    log::info!("Executing script, {} bytes", input.len());
 
     // Parse JSON input manually
     let input: ExecuteScriptInput =

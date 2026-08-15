@@ -140,9 +140,11 @@ function requestStateToPostman(state: RequestState): PostmanRequest {
   let postmanUrl: PostmanUrl
   if (state.url) {
     const parsed = parseUrl(state.url)
+    const protocolMatch = state.url.match(/^(\w+):\/\//)
+    const protocol = protocolMatch ? protocolMatch[1] : (state.url.startsWith('https') ? 'https' : 'http')
     postmanUrl = {
       raw: state.url,
-      protocol: 'https',
+      protocol,
       host: parsed.host,
       path: parsed.path,
       query: parsed.query.map(q => ({ key: q.key, value: q.value })),

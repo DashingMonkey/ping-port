@@ -47,7 +47,8 @@ fn serialize_variables(variables: &HashMap<String, String>) -> String {
 pub fn get_environments(state: State<'_, Mutex<AppState>>) -> Result<Vec<Environment>, String> {
     let app_state = get_db(&state)?;
     let db: &Database = &app_state.db;
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn_guard = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn = conn_guard.as_ref().ok_or("Database is closed".to_string())?;
 
     let mut stmt = conn
         .prepare("SELECT id, name, COALESCE(variables, '{}'), created_at, updated_at FROM environments ORDER BY created_at DESC")
@@ -78,7 +79,8 @@ pub fn create_environment(
 ) -> Result<Environment, String> {
     let app_state = get_db(&state)?;
     let db: &Database = &app_state.db;
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn_guard = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn = conn_guard.as_ref().ok_or("Database is closed".to_string())?;
 
     let now = chrono::Utc::now().to_rfc3339();
     let id = input.id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
@@ -107,7 +109,8 @@ pub fn update_environment(
 ) -> Result<(), String> {
     let app_state = get_db(&state)?;
     let db: &Database = &app_state.db;
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn_guard = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn = conn_guard.as_ref().ok_or("Database is closed".to_string())?;
 
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -152,7 +155,8 @@ pub fn update_environment(
 pub fn delete_environment(id: String, state: State<'_, Mutex<AppState>>) -> Result<(), String> {
     let app_state = get_db(&state)?;
     let db: &Database = &app_state.db;
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn_guard = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn = conn_guard.as_ref().ok_or("Database is closed".to_string())?;
 
     conn.execute("DELETE FROM environments WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -168,7 +172,8 @@ pub fn delete_environment_variable(
 ) -> Result<(), String> {
     let app_state = get_db(&state)?;
     let db: &Database = &app_state.db;
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn_guard = db.conn.lock().map_err(|e| e.to_string())?;
+    let conn = conn_guard.as_ref().ok_or("Database is closed".to_string())?;
 
     // Get current variables
     let mut stmt = conn

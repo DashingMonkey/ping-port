@@ -5,6 +5,7 @@
   "windows": ["main", "pp-api-reference"],
   "permissions": [
     "core:default",
+    "core:app:allow-version",
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Listbox, ListboxButton, ListboxOptions, ListboxOption } from '@headlessui/vue'
 import MethodSelect from './MethodSelect.vue'
@@ -19,6 +19,7 @@ const props = defineProps<{
   title: string
   collectionId?: string
   collections?: Collection[]
+  loading?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -39,6 +40,7 @@ const selectedCollectionName = computed(() => {
 // Title editing state
 const isEditingTitle = ref(false)
 const editedTitle = ref('')
+const titleInputRef = ref<HTMLInputElement | null>(null)
 
 function handleUrlInput(event: Event) {
   const target = event.target as HTMLTextAreaElement
@@ -51,6 +53,7 @@ function handleUrlInput(event: Event) {
 function handleTitleClick() {
   isEditingTitle.value = true
   editedTitle.value = props.title
+  nextTick(() => titleInputRef.value?.focus())
 }
 
 function handleTitleEdit(event: Event) {
@@ -85,7 +88,7 @@ function handleCollectionChange(collectionId: string) {
 }
 
 function handleKeydown(event: KeyboardEvent) {
-  if (event.key === 'Enter') {
+  if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !props.loading) {
     emit('send')
   }
 }
@@ -209,7 +212,8 @@ function handleSave() {
       <button
         type="button"
         @click="handleSend"
-        class="inline-flex items-center justify-center w-[60px] px-2 py-1.5 border border-border-default rounded bg-accent hover:bg-cyan-400 text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-accent/50 transition-colors duration-150 font-['IBM_Plex_Sans']"
+        :disabled="props.loading"
+        class="inline-flex items-center justify-center w-[60px] px-2 py-1.5 border border-border-default rounded bg-accent hover:bg-cyan-400 text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-accent/50 transition-colors duration-150 font-['IBM_Plex_Sans'] disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <svg class="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />

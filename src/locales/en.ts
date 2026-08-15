@@ -18,6 +18,7 @@ const en = {
     language: 'Language',
     english: 'English',
     chinese: '中文',
+    toggleTheme: 'Toggle theme',
   },
   window: {
     minimize: 'Minimize',
@@ -130,6 +131,8 @@ const en = {
     noVariables: 'No variables',
     addVariable: 'Add Variable',
     save: 'Save',
+    selectFile: 'Select File',
+    selectFilePlaceholder: 'Click to select file',
   },
   collection: {
     collections: 'Collections',
@@ -161,6 +164,9 @@ const en = {
     globalVariables: 'Global Variables',
     rename: 'Rename',
     delete: 'Delete',
+    createFailed: 'Failed to create environment',
+    deleteFailed: 'Failed to delete environment',
+    updateFailed: 'Failed to update environment',
   },
   workspace: {
     label: 'Workspace:',
@@ -172,6 +178,8 @@ const en = {
     enterName: 'Enter workspace name',
     renameTitle: 'Rename Workspace',
     enterNewName: 'Enter new name',
+    createFailed: 'Failed to create workspace',
+    renameFailed: 'Failed to rename workspace',
   },
   saveRequest: {
     title: 'Save Request',
@@ -196,6 +204,7 @@ const en = {
     invalidJson: 'Invalid JSON format: {error}',
     download: 'Download',
     copyClipboard: 'Copy to Clipboard',
+    copyFailed: 'Failed to copy to clipboard',
     cancel: 'Cancel',
     import: 'Import',
     generateExport: 'Generate Export',

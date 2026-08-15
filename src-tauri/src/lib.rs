@@ -6,6 +6,7 @@ pub mod scripting;
 use commands::collections::{
     create_collection, delete_collection, get_collections, reorder_collections, update_collection,
 };
+use commands::dialog::pick_file;
 use commands::environments::{
     create_environment, delete_environment, delete_environment_variable, get_environments,
     update_environment,
@@ -26,6 +27,7 @@ use tauri::Manager;
 pub struct AppState {
     pub db: Arc<Database>,
     pub current_workspace: Mutex<Option<String>>,
+    pub http_client: crate::http::client::HttpClient,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -39,6 +41,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             get_collections,
+            pick_file,
             create_collection,
             update_collection,
             delete_collection,
@@ -70,7 +73,10 @@ pub fn run() {
                 .and_then(|p| p.parent().map(|p| p.to_path_buf()))
                 .unwrap_or_else(|| {
                     app.path().executable_dir().unwrap_or_else(|_| {
-                        std::env::current_dir().expect("Failed to get current directory")
+                        std::env::current_exe()
+                            .ok()
+                            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+                            .unwrap_or_else(|| std::env::temp_dir())
                     })
                 });
 

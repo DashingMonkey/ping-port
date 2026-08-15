@@ -1,7 +1,7 @@
-use crate::http::client::{Body, HttpAuth, HttpClient, KeyValuePair};
+use crate::http::client::{Body, HttpAuth, KeyValuePair};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tauri::command;
+use tauri::{command, Manager};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "content")]
@@ -50,21 +50,16 @@ pub struct SendRequestResponse {
 }
 
 #[command]
-pub async fn send_request(input: SendRequestInput) -> SendRequestResponse {
-    let client = match HttpClient::new() {
-        Ok(c) => c,
-        Err(e) => {
-            return SendRequestResponse {
-                success: false,
-                error: Some(e),
-                status: None,
-                status_text: None,
-                headers: None,
-                body: None,
-                time_ms: None,
-                size_bytes: None,
-            };
-        }
+pub async fn send_request(
+    input: SendRequestInput,
+    app_handle: tauri::AppHandle,
+) -> Result<SendRequestResponse, String> {
+    let client = {
+        let state = app_handle.state::<std::sync::Mutex<crate::AppState>>();
+        let app_state = state
+            .lock()
+            .map_err(|e| format!("Internal error: {}", e))?;
+        app_state.http_client.clone()
     };
 
     let auth = input.auth.map(|a| match a.kind.as_str() {
@@ -87,22 +82,16 @@ pub async fn send_request(input: SendRequestInput) -> SendRequestResponse {
         None => Body::None,
         Some(RequestBody::None) => Body::None,
         Some(RequestBody::Json(content)) => Body::Raw(content.clone()),
-        Some(RequestBody::FormData(json_content)) | Some(RequestBody::UrlEncoded(json_content)) => {
-            // Both form-data and urlencoded use the same KeyValuePair[] format
+        Some(RequestBody::FormData(json_content)) => {
             match serde_json::from_str::<Vec<KeyValuePair>>(json_content) {
                 Ok(items) => Body::FormData(items),
-                Err(e) => {
-                    return SendRequestResponse {
-                        success: false,
-                        error: Some(format!("Failed to parse form data: {}", e)),
-                        status: None,
-                        status_text: None,
-                        headers: None,
-                        body: None,
-                        time_ms: None,
-                        size_bytes: None,
-                    }
-                }
+                Err(e) => return Err(format!("Failed to parse form data: {}", e)),
+            }
+        }
+        Some(RequestBody::UrlEncoded(json_content)) => {
+            match serde_json::from_str::<Vec<KeyValuePair>>(json_content) {
+                Ok(items) => Body::UrlEncoded(items),
+                Err(e) => return Err(format!("Failed to parse form data: {}", e)),
             }
         }
     };
@@ -117,7 +106,7 @@ pub async fn send_request(input: SendRequestInput) -> SendRequestResponse {
     };
 
     match client.send(request).await {
-        Ok(response) => SendRequestResponse {
+        Ok(response) => Ok(SendRequestResponse {
             success: true,
             error: None,
             status: Some(response.status),
@@ -126,8 +115,8 @@ pub async fn send_request(input: SendRequestInput) -> SendRequestResponse {
             body: Some(response.body),
             time_ms: Some(response.time_ms),
             size_bytes: Some(response.size_bytes),
-        },
-        Err(e) => SendRequestResponse {
+        }),
+        Err(e) => Ok(SendRequestResponse {
             success: false,
             error: Some(e),
             status: None,
@@ -136,6 +125,6 @@ pub async fn send_request(input: SendRequestInput) -> SendRequestResponse {
             body: None,
             time_ms: None,
             size_bytes: None,
-        },
+        }),
     }
 }

@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useCollectionsStore } from '../../stores/collections'
 import { useRequestsStore } from '../../stores/requests'
+import { toast } from '../../composables/useToast'
 
 const { t } = useI18n()
 import { toPostmanCollection, fromPostmanCollection, exportToJson, importFromJson, type PostmanCollection } from '../../lib/import-export'
@@ -21,6 +22,8 @@ const requestsStore = useRequestsStore()
 const importText = ref('')
 const importError = ref('')
 const exportText = ref('')
+const importing = ref(false)
+const copySuccess = ref(false)
 
 const handleExport = () => {
   const postmanData = toPostmanCollection(
@@ -32,14 +35,20 @@ const handleExport = () => {
 
 const handleImport = async () => {
   importError.value = ''
+  importing.value = true
   try {
     const data = importFromJson(importText.value) as PostmanCollection
     const { collections, requests } = fromPostmanCollection(data)
 
+    // Build a map of old collection IDs to new ones
+    const collectionIdMap = new Map<string, string>()
+
     for (const col of collections) {
-      await collectionsStore.createCollection({
+      const created = await collectionsStore.createCollection({
         name: col.name,
+        parentId: col.parentId ? collectionIdMap.get(col.parentId) || undefined : undefined,
       })
+      collectionIdMap.set(col.id, created.id)
     }
 
     for (const req of requests) {
@@ -47,13 +56,15 @@ const handleImport = async () => {
         name: req.name,
         method: req.method,
         url: req.url,
-        collectionId: req.collectionId,
+        collectionId: req.collectionId ? (collectionIdMap.get(req.collectionId) || '') : '',
       })
     }
 
     emit('close')
   } catch (e) {
     importError.value = t('importExport.invalidJson', { error: `${e}` })
+  } finally {
+    importing.value = false
   }
 }
 
@@ -68,12 +79,18 @@ const downloadExport = () => {
 }
 
 const copyToClipboard = async () => {
-  await navigator.clipboard.writeText(exportText.value)
+  try {
+    await navigator.clipboard.writeText(exportText.value)
+    copySuccess.value = true
+    setTimeout(() => { copySuccess.value = false }, 2000)
+  } catch (e) {
+    toast.error(t('importExport.copyFailed'))
+  }
 }
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="emit('close')">
     <div class="bg-surface-base rounded-lg shadow-xl w-full max-w-lg mx-4 border border-border-default">
       <div class="px-6 py-4 border-b border-border-default">
         <h3 class="text-lg font-semibold text-text-primary font-['IBM_Plex_Sans']">{{ t(mode === 'import' ? 'importExport.importTitle' : 'importExport.exportTitle') }}</h3>
@@ -130,9 +147,10 @@ const copyToClipboard = async () => {
         <button
           v-if="mode === 'import'"
           @click="handleImport"
-          class="px-4 py-2 text-sm bg-accent hover:bg-cyan-400 text-surface-deep rounded font-semibold transition-colors duration-150 font-['IBM_Plex_Sans']"
+          :disabled="importing"
+          class="px-4 py-2 text-sm bg-accent hover:bg-cyan-400 text-surface-deep rounded font-semibold transition-colors duration-150 font-['IBM_Plex_Sans'] disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {{ t('importExport.import') }}
+          {{ importing ? t('common.loading') : t('importExport.import') }}
         </button>
         <button
           v-else

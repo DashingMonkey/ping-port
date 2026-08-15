@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { invoke } from '@tauri-apps/api/core'
 import VariableInput from '../common/VariableInput.vue'
 
 const { t } = useI18n()
@@ -23,14 +24,16 @@ const emit = defineEmits<{
 
 const effectiveVars = computed(() => props.variables ?? {})
 
+const uidMap = new WeakMap<object, number>()
 let nextId = 0
 
 function rowKey(item: KeyValuePair): number {
-  const ext = item as KeyValuePair & { _uid?: number }
-  if (ext._uid === undefined) {
-    ext._uid = ++nextId
+  let uid = uidMap.get(item)
+  if (uid === undefined) {
+    uid = ++nextId
+    uidMap.set(item, uid)
   }
-  return ext._uid
+  return uid
 }
 
 function handleEnabledChange(index: number, enabled: boolean) {
@@ -65,6 +68,29 @@ function handleDelete(index: number) {
 function handleAdd() {
   const newItems = [...props.modelValue, { key: '', value: '', enabled: true, type: 'text' as const }]
   emit('update:modelValue', newItems)
+}
+
+const pickingIndex = ref<number | null>(null)
+
+async function handlePickFile(index: number) {
+  if (pickingIndex.value !== null) return
+  pickingIndex.value = index
+  try {
+    const path = await invoke<string | null>('pick_file')
+    if (path) {
+      handleValueChange(index, path)
+    }
+  } catch {
+    // dialog dismissed or error, ignore
+  } finally {
+    pickingIndex.value = null
+  }
+}
+
+function getFileName(path: string): string {
+  if (!path) return ''
+  const parts = path.split(/[/\\]/)
+  return parts[parts.length - 1] || path
 }
 </script>
 
@@ -114,7 +140,21 @@ function handleAdd() {
           @update:model-value="handleKeyChange(index, $event)"
         />
 
+        <template v-if="(item.type || 'text') === 'file'">
+          <button
+            type="button"
+            :disabled="!item.enabled"
+            :title="item.value || t('keyValue.selectFilePlaceholder')"
+            class="w-full h-6 px-2 flex items-center text-[11px] truncate cursor-pointer hover:bg-surface-elevated transition-colors duration-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            @click="handlePickFile(index)"
+          >
+            <span v-if="pickingIndex === index" class="text-accent animate-pulse">...</span>
+            <span v-else-if="item.value" class="text-accent truncate">{{ getFileName(item.value) }}</span>
+            <span v-else class="text-text-muted truncate">{{ t('keyValue.selectFilePlaceholder') }}</span>
+          </button>
+        </template>
         <VariableInput
+          v-else
           :model-value="item.value"
           :variables="effectiveVars"
           :disabled="!item.enabled"

@@ -5,6 +5,7 @@ import { Listbox, ListboxButton, ListboxOptions, ListboxOption } from '@headless
 import { useWorkspaceStore } from '../../stores/workspace'
 import { prompt } from '../../composables/usePrompt'
 import { invoke } from '@tauri-apps/api/core'
+import { toast } from '../../composables/useToast'
 
 const { t } = useI18n()
 const workspaceStore = useWorkspaceStore()
@@ -20,9 +21,13 @@ async function handleSelect(name: string) {
 async function handleNewWorkspace() {
   const name = await prompt(t('workspace.enterName'), '', t('workspace.enterName'))
   if (name && name.trim()) {
-    await invoke('create_workspace', { name: name.trim() })
-    await workspaceStore.switchWorkspace(name.trim())
-    await workspaceStore.scanWorkspaces()
+    try {
+      await invoke('create_workspace', { name: name.trim() })
+      await workspaceStore.switchWorkspace(name.trim())
+      await workspaceStore.scanWorkspaces()
+    } catch (e) {
+      toast.error(`${t('workspace.createFailed')}: ${e}`)
+    }
   }
 }
 
@@ -31,8 +36,12 @@ async function handleRename(e: Event, currentName: string) {
   if (!currentName || currentName.startsWith('temp-')) return
   const newName = await prompt(t('workspace.renameTitle'), currentName, t('workspace.enterNewName'))
   if (newName && newName !== currentName) {
-    await workspaceStore.renameWorkspace(currentName, newName)
-    await workspaceStore.scanWorkspaces()
+    try {
+      await workspaceStore.renameWorkspace(currentName, newName)
+      await workspaceStore.scanWorkspaces()
+    } catch (e) {
+      toast.error(`${t('workspace.renameFailed')}: ${e}`)
+    }
   }
 }
 

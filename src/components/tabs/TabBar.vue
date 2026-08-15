@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useTabsStore } from '../../stores/tabs'
 import { DEFAULT_REQUEST_STATE, type HttpMethod } from '../../stores/types'
@@ -76,6 +76,20 @@ const handleContextMenu = (event: MouseEvent, tabId: string) => {
 const closeContextMenu = () => {
   contextMenu.value.show = false
 }
+
+function handleContextmenuKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    closeContextMenu()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('keydown', handleContextmenuKeydown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleContextmenuKeydown)
+})
 
 const handleCloseThis = () => {
   if (contextMenu.value.tabId) {
@@ -214,6 +228,7 @@ const isTabDirty = (tabId: string | null) => {
         class="fixed z-50 bg-surface-base border border-border-default rounded-lg shadow-lg py-1 min-w-[160px]"
         :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
         @click.stop
+        role="menu"
       >
         <button
           v-if="isRequestTab(contextMenu.tabId)"
@@ -238,6 +253,7 @@ const isTabDirty = (tabId: string | null) => {
         <button
           class="w-full px-4 py-2 text-left text-xs text-text-secondary hover:bg-surface-elevated hover:text-text-primary transition-colors duration-150"
           @click="handleCloseAll"
+          role="menuitem"
         >
           {{ t('tabs.closeAllTabs') }}
         </button>
@@ -251,6 +267,7 @@ const isTabDirty = (tabId: string | null) => {
         <button
           class="w-full px-4 py-2 text-left text-xs text-text-secondary hover:bg-surface-elevated hover:text-text-primary transition-colors duration-150"
           @click="handleCloseRight"
+          role="menuitem"
         >
           {{ t('tabs.closeTabsRight') }}
         </button>

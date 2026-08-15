@@ -29,6 +29,8 @@ export interface RequestState {
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'OPTIONS' | 'HEAD'
 
+export type RequestSubTab = 'params' | 'headers' | 'body' | 'auth' | 'scripts'
+
 export interface KeyValuePair {
   key: string
   value: string

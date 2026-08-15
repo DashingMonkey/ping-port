@@ -172,7 +172,7 @@ impl RuntimeManager {
 
         log::info!(
             "Executing pre-request script: {}",
-            &script[..script.len().min(200)]
+            script.chars().take(200).collect::<String>()
         );
         self.isolation.start();
         let deadline = Instant::now() + Duration::from_millis(self.isolation.max_time_ms);
@@ -544,13 +544,14 @@ fn create_pm_object<'js>(ctx: &Ctx<'js>, pm: JsPmApi) -> anyhow::Result<JsPmApi>
                     Err(e) => (false, Some(e.to_string())),
                 };
                 let duration = start.elapsed().as_millis() as u64;
-                let mut results = test_results.0.lock().unwrap();
-                results.push(TestResult {
-                    name,
-                    passed,
-                    error: error_msg,
-                    duration,
-                });
+                if let Ok(mut results) = test_results.0.lock() {
+                    results.push(TestResult {
+                        name,
+                        passed,
+                        error: error_msg,
+                        duration,
+                    });
+                }
             }),
         )?;
     }
@@ -574,44 +575,36 @@ fn create_pm_object<'js>(ctx: &Ctx<'js>, pm: JsPmApi) -> anyhow::Result<JsPmApi>
         console_obj.set(
             "log",
             Function::new(ctx.clone(), move |args: Value| {
-                logs_for_log
-                    .0
-                    .lock()
-                    .unwrap()
-                    .push(value_to_string(&args));
+                if let Ok(mut logs) = logs_for_log.0.lock() {
+                    logs.push(value_to_string(&args));
+                }
             }),
         )?;
         let logs_for_info = logs.clone();
         console_obj.set(
             "info",
             Function::new(ctx.clone(), move |args: Value| {
-                logs_for_info
-                    .0
-                    .lock()
-                    .unwrap()
-                    .push(format!("[INFO] {}", value_to_string(&args)));
+                if let Ok(mut logs) = logs_for_info.0.lock() {
+                    logs.push(format!("[INFO] {}", value_to_string(&args)));
+                }
             }),
         )?;
         let logs_for_error = logs.clone();
         console_obj.set(
             "error",
             Function::new(ctx.clone(), move |args: Value| {
-                logs_for_error
-                    .0
-                    .lock()
-                    .unwrap()
-                    .push(format!("[ERROR] {}", value_to_string(&args)));
+                if let Ok(mut logs) = logs_for_error.0.lock() {
+                    logs.push(format!("[ERROR] {}", value_to_string(&args)));
+                }
             }),
         )?;
         let logs_for_warn = logs.clone();
         console_obj.set(
             "warn",
             Function::new(ctx.clone(), move |args: Value| {
-                logs_for_warn
-                    .0
-                    .lock()
-                    .unwrap()
-                    .push(format!("[WARN] {}", value_to_string(&args)));
+                if let Ok(mut logs) = logs_for_warn.0.lock() {
+                    logs.push(format!("[WARN] {}", value_to_string(&args)));
+                }
             }),
         )?;
         ctx.globals().set("console", console_obj)?;

@@ -88,13 +88,15 @@ function copyError() {
 }
 
 async function finishInit() {
-  // Load settings (workspace is determined at this point)
-  settingsStore.loadSettings()
+  try {
+    // Load settings (workspace is determined at this point)
+    settingsStore.loadSettings()
 
-  // Load tabs and drafts (from current workspace's localStorage)
-  tabsStore.loadTabs()
-
-  isInitializing.value = false
+    // Load tabs and drafts (from current workspace's localStorage)
+    tabsStore.loadTabs()
+  } finally {
+    isInitializing.value = false
+  }
 }
 
 onMounted(initializeApp)

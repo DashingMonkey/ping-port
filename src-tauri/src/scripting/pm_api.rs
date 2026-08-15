@@ -36,8 +36,9 @@ impl PmVariables {
     /// Extract a string value from quoted or unquoted input
     fn extract_string_value(input: &str) -> String {
         let trimmed = input.trim();
-        if (trimmed.starts_with('"') && trimmed.ends_with('"'))
-            || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
+        if trimmed.len() >= 2
+            && ((trimmed.starts_with('"') && trimmed.ends_with('"'))
+                || (trimmed.starts_with('\'') && trimmed.ends_with('\'')))
         {
             trimmed[1..trimmed.len() - 1].to_string()
         } else {

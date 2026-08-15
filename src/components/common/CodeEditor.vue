@@ -13,6 +13,7 @@ const emit = defineEmits<{
 const textarea = ref<HTMLTextAreaElement>()
 const highlightDiv = ref<HTMLDivElement>()
 const isDark = ref(false)
+let mutationObserver: MutationObserver | null = null
 
 // Autocomplete state
 const showSuggestions = ref(false)
@@ -50,30 +51,33 @@ const ppSubMethods: Record<string, string[]> = {
 }
 
 // Detect theme
+const onStorageChange = (e: StorageEvent) => {
+  if (e.key === 'pingport-settings') {
+    updateTheme()
+  }
+}
+
 onMounted(() => {
   updateTheme()
 
   // Listen for storage events (cross-window theme switching)
-  window.addEventListener('storage', (e) => {
-    if (e.key === 'pingport-settings') {
-      updateTheme()
-    }
-  })
+  window.addEventListener('storage', onStorageChange)
 
   // Listen for DOM changes (same-window theme switching)
-  const observer = new MutationObserver(() => {
+  mutationObserver = new MutationObserver(() => {
     updateTheme()
   })
-  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+  mutationObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
 
   document.addEventListener('click', handleClickOutside)
-
-  onUnmounted(() => {
-    observer.disconnect()
-  })
 })
 
 onUnmounted(() => {
+  window.removeEventListener('storage', onStorageChange)
+  if (mutationObserver) {
+    mutationObserver.disconnect()
+    mutationObserver = null
+  }
   document.removeEventListener('click', handleClickOutside)
 })
 

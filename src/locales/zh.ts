@@ -20,6 +20,7 @@ const zh: typeof en = {
     language: '语言',
     english: 'English',
     chinese: '中文',
+    toggleTheme: '切换主题',
   },
   window: {
     minimize: '最小化',
@@ -132,6 +133,8 @@ const zh: typeof en = {
     noVariables: '无变量',
     addVariable: '添加变量',
     save: '保存',
+    selectFile: '选择文件',
+    selectFilePlaceholder: '点击选择文件',
   },
   collection: {
     collections: '集合',
@@ -163,6 +166,9 @@ const zh: typeof en = {
     globalVariables: '全局变量',
     rename: '重命名',
     delete: '删除',
+    createFailed: '创建环境失败',
+    deleteFailed: '删除环境失败',
+    updateFailed: '更新环境失败',
   },
   workspace: {
     label: '工作区:',
@@ -174,6 +180,8 @@ const zh: typeof en = {
     enterName: '输入工作区名称',
     renameTitle: '重命名工作区',
     enterNewName: '输入新名称',
+    createFailed: '创建工作区失败',
+    renameFailed: '重命名工作区失败',
   },
   saveRequest: {
     title: '保存请求',
@@ -198,6 +206,7 @@ const zh: typeof en = {
     invalidJson: '无效的 JSON 格式: {error}',
     download: '下载',
     copyClipboard: '复制到剪贴板',
+    copyFailed: '复制到剪贴板失败',
     cancel: '取消',
     import: '导入',
     generateExport: '生成导出',

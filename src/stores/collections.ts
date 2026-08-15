@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { useRequestsStore } from './requests'
+import { useTabsStore } from './tabs'
 
 export interface Collection {
   id: string
@@ -84,41 +86,83 @@ export const useCollectionsStore = defineStore('collections', () => {
   }
 
   const createCollection = async (input: CreateCollectionInput): Promise<Collection> => {
-    const rustInput = {
-      name: input.name,
-      kind: input.type || null,
-      parent_id: input.parentId || null,
+    try {
+      const rustInput = {
+        name: input.name,
+        kind: input.type || null,
+        parent_id: input.parentId || null,
+      }
+      const result = await invoke<RustCollection>('create_collection', { input: rustInput })
+      const collection = transformFromRust(result)
+      collections.value.push(collection)
+      return collection
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e)
+      throw e
     }
-    const result = await invoke<RustCollection>('create_collection', { input: rustInput })
-    const collection = transformFromRust(result)
-    collections.value.unshift(collection)
-    return collection
   }
 
   const updateCollection = async (input: UpdateCollectionInput): Promise<void> => {
-    const rustInput = {
-      id: input.id,
-      name: input.name || null,
-      kind: input.type !== undefined ? input.type : null,
-      parent_id: input.parentId !== undefined ? input.parentId : null,
-    }
-    await invoke('update_collection', { input: rustInput })
-    const index = collections.value.findIndex(c => c.id === input.id)
-    if (index !== -1) {
-      const existing = collections.value[index]
-      collections.value[index] = {
-        ...existing,
-        name: input.name ?? existing.name,
-        parentId: input.parentId !== undefined ? input.parentId : existing.parentId,
-        type: input.type !== undefined ? (input.type || 'folder') : existing.type,
-        updatedAt: new Date().toISOString(),
+    try {
+      const rustInput = {
+        id: input.id,
+        name: input.name !== undefined ? input.name : null,
+        kind: input.type !== undefined ? input.type : null,
+        parent_id: input.parentId !== undefined ? input.parentId : null,
       }
+      await invoke('update_collection', { input: rustInput })
+      const index = collections.value.findIndex(c => c.id === input.id)
+      if (index !== -1) {
+        const existing = collections.value[index]
+        collections.value[index] = {
+          ...existing,
+          name: input.name ?? existing.name,
+          parentId: input.parentId !== undefined ? input.parentId : existing.parentId,
+          type: input.type !== undefined ? (input.type || 'folder') : existing.type,
+          updatedAt: new Date().toISOString(),
+        }
+      }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e)
+      throw e
     }
   }
 
   const deleteCollection = async (id: string): Promise<void> => {
-    await invoke('delete_collection', { id })
-    collections.value = collections.value.filter(c => c.id !== id)
+    try {
+      await invoke('delete_collection', { id })
+
+      // Get all deleted collection IDs (the collection + all descendants)
+      const deletedIds = new Set<string>([id])
+      let added = true
+      while (added) {
+        added = false
+        collections.value.forEach(c => {
+          if (c.parentId && deletedIds.has(c.parentId) && !deletedIds.has(c.id)) {
+            deletedIds.add(c.id)
+            added = true
+          }
+        })
+      }
+
+      // Clean up requests belonging to deleted collections
+      const requestsStore = useRequestsStore()
+      const tabsStore = useTabsStore()
+      const orphanedRequests = requestsStore.requests.filter(r => deletedIds.has(r.collectionId || ''))
+      // Close tabs for orphaned requests
+      const tabsToClose = tabsStore.tabs.filter(t => orphanedRequests.some(r => r.id === t.requestId))
+      for (const tab of tabsToClose) {
+        tabsStore.closeTab(tab.id)
+      }
+      // Remove orphaned requests
+      requestsStore.requests = requestsStore.requests.filter(r => !deletedIds.has(r.collectionId || ''))
+
+      // Remove deleted collections (the collection itself + its direct children)
+      collections.value = collections.value.filter(c => !deletedIds.has(c.id))
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e)
+      throw e
+    }
   }
 
   const getChildren = (parentId: string | null): Collection[] => {
@@ -142,10 +186,7 @@ export const useCollectionsStore = defineStore('collections', () => {
 
     // Update positions
     siblings.forEach((col, index) => {
-      const collection = collections.value.find(c => c.id === col.id)
-      if (collection) {
-        collection.position = index
-      }
+      col.position = index
     })
 
     // Persist to backend

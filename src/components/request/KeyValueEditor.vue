@@ -22,14 +22,16 @@ const emit = defineEmits<{
 
 const effectiveVars = computed(() => props.variables ?? {})
 
+const uidMap = new WeakMap<object, number>()
 let nextId = 0
 
 function rowKey(item: KeyValuePair): number {
-  const ext = item as KeyValuePair & { _uid?: number }
-  if (ext._uid === undefined) {
-    ext._uid = ++nextId
+  let uid = uidMap.get(item)
+  if (uid === undefined) {
+    uid = ++nextId
+    uidMap.set(item, uid)
   }
-  return ext._uid
+  return uid
 }
 
 function handleEnabledChange(index: number, enabled: boolean) {

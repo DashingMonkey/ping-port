@@ -31,7 +31,9 @@ export const useSettingsStore = defineStore('settings', () => {
           language.value = parsed.language
           ;(i18n.global.locale as unknown as { value: Language }).value = parsed.language
         }
-      } catch {}
+      } catch (e) {
+        console.warn('Failed to parse settings:', e)
+      }
     }
     applyTheme()
   }

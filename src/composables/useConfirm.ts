@@ -11,11 +11,19 @@ export interface ConfirmOptions {
 }
 
 const container = shallowRef<HTMLElement | null>(null)
+let currentResolve: ((value: boolean) => void) | null = null
 
 function showConfirm(options: ConfirmOptions): Promise<boolean> {
   return new Promise((resolve) => {
+    // Resolve any pending promise first
+    if (currentResolve) {
+      currentResolve(false)
+      currentResolve = null
+    }
+
     // Remove existing dialog if any
     if (container.value) {
+      render(null, container.value)
       document.body.removeChild(container.value)
     }
 
@@ -23,6 +31,8 @@ function showConfirm(options: ConfirmOptions): Promise<boolean> {
     const el = document.createElement('div')
     document.body.appendChild(el)
     container.value = el
+
+    currentResolve = resolve
 
     const vnode = h(ConfirmDialog, {
       title: options.title ?? (options.danger ? i18n.global.t('common.confirmAction') : i18n.global.t('common.confirm')),
@@ -32,10 +42,12 @@ function showConfirm(options: ConfirmOptions): Promise<boolean> {
       danger: options.danger,
       onConfirm: () => {
         resolve(true)
+        currentResolve = null
         cleanup()
       },
       onCancel: () => {
         resolve(false)
+        currentResolve = null
         cleanup()
       }
     })
@@ -45,6 +57,7 @@ function showConfirm(options: ConfirmOptions): Promise<boolean> {
 
 function cleanup() {
   if (container.value) {
+    render(null, container.value)
     document.body.removeChild(container.value)
     container.value = null
   }

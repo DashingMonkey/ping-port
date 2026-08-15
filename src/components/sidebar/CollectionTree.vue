@@ -216,7 +216,6 @@ onMounted(async () => {
     await Promise.all([
       collectionsStore.fetchCollections(),
       requestsStore.fetchRequests(),
-      tabsStore.loadTabs(),
     ])
   } finally {
     isLoading.value = false

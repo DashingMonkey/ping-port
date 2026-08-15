@@ -37,6 +37,9 @@ function handleOverlayClick(event: MouseEvent) {
 }
 
 function handleKeydown(event: KeyboardEvent) {
+  // Ignore keypresses while an IME (e.g. Chinese pinyin) is composing,
+  // otherwise pressing Enter to confirm a candidate closes the dialog.
+  if (event.isComposing) return
   if (event.key === 'Enter' && inputValue.value.trim()) {
     handleConfirm()
   } else if (event.key === 'Escape') {

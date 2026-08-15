@@ -13,7 +13,7 @@ export function replaceVariables(
   text: string,
   variables: Record<string, string>
 ): string {
-  return text.replace(/\{\{(\w+)\}\}/g, (match, varName) => {
+  return text.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
     return variables[varName] !== undefined ? variables[varName] : match;
   });
 }
@@ -24,7 +24,7 @@ export function replaceVariables(
  * @returns Array of unique variable names found
  */
 export function extractVariables(text: string): string[] {
-  const matches = text.match(/\{\{(\w+)\}\}/g);
+  const matches = text.match(/\{\{([^}]+)\}\}/g);
   if (!matches) return [];
 
   const varNames = matches.map((match) => match.slice(2, -2));
@@ -37,5 +37,5 @@ export function extractVariables(text: string): string[] {
  * @returns True if text contains {{variableName}} placeholders
  */
 export function hasVariables(text: string): boolean {
-  return /\{\{(\w+)\}\}/.test(text);
+  return /\{\{([^}]+)\}\}/.test(text);
 }

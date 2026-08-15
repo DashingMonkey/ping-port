@@ -37,6 +37,7 @@ pub enum Body {
     None,
     Raw(String),
     FormData(Vec<KeyValuePair>),
+    UrlEncoded(Vec<KeyValuePair>),
 }
 
 #[derive(Debug, Clone)]
@@ -59,6 +60,7 @@ pub struct HttpResponse {
     pub size_bytes: usize,
 }
 
+#[derive(Clone)]
 pub struct HttpClient {
     client: Client,
 }
@@ -191,6 +193,15 @@ impl HttpClient {
                 }
 
                 req_builder = req_builder.multipart(form);
+            }
+            Body::UrlEncoded(fields) => {
+                let mut form_pairs = Vec::new();
+                for field in fields {
+                    if field.enabled {
+                        form_pairs.push((field.key.as_str(), field.value.as_str()));
+                    }
+                }
+                req_builder = req_builder.form(&form_pairs);
             }
         }
 

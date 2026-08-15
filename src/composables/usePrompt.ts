@@ -12,11 +12,19 @@ export interface PromptOptions {
 }
 
 const container = shallowRef<HTMLElement | null>(null)
+let currentResolve: ((value: string | null) => void) | null = null
 
 function showPrompt(options: PromptOptions): Promise<string | null> {
   return new Promise((resolve) => {
+    // Resolve any pending promise first
+    if (currentResolve) {
+      currentResolve(null)
+      currentResolve = null
+    }
+
     // Remove existing dialog if any
     if (container.value) {
+      render(null, container.value)
       document.body.removeChild(container.value)
     }
 
@@ -24,6 +32,8 @@ function showPrompt(options: PromptOptions): Promise<string | null> {
     const el = document.createElement('div')
     document.body.appendChild(el)
     container.value = el
+
+    currentResolve = resolve
 
     const vnode = h(PromptDialog, {
       title: options.title ?? i18n.global.t('common.enterValue'),
@@ -34,10 +44,12 @@ function showPrompt(options: PromptOptions): Promise<string | null> {
       defaultValue: options.defaultValue,
       onConfirm: (value: string) => {
         resolve(value)
+        currentResolve = null
         cleanup()
       },
       onCancel: () => {
         resolve(null)
+        currentResolve = null
         cleanup()
       }
     })
@@ -47,6 +59,7 @@ function showPrompt(options: PromptOptions): Promise<string | null> {
 
 function cleanup() {
   if (container.value) {
+    render(null, container.value)
     document.body.removeChild(container.value)
     container.value = null
   }

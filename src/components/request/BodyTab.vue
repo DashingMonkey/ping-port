@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { RequestBody, KeyValuePair } from '../../stores/types'
 import KeyValueTypeEditor from './KeyValueTypeEditor.vue'
@@ -33,6 +33,7 @@ const bodyLabelMap = computed(() => ({
 }))
 
 const prettifyError = ref<string | null>(null)
+let prettifyTimer: ReturnType<typeof setTimeout> | null = null
 
 // Resize state
 const textareaComponentRef = ref<InstanceType<typeof VariableTextarea> | null>(null)
@@ -67,6 +68,12 @@ function stopResize() {
   document.removeEventListener('mouseup', stopResize)
 }
 
+onUnmounted(() => {
+  document.removeEventListener('mousemove', onResize)
+  document.removeEventListener('mouseup', stopResize)
+  if (prettifyTimer) clearTimeout(prettifyTimer)
+})
+
 function handleTypeChange(type: RequestBody['type']) {
   prettifyError.value = null
   // Clear body content when switching type
@@ -94,7 +101,8 @@ function prettify() {
     emit('update:modelValue', { ...props.modelValue, content: formatted })
   } catch (e) {
     prettifyError.value = t('body.invalidJson')
-    setTimeout(() => {
+    if (prettifyTimer) clearTimeout(prettifyTimer)
+    prettifyTimer = setTimeout(() => {
       prettifyError.value = null
     }, 2000)
   }

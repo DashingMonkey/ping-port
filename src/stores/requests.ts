@@ -102,62 +102,77 @@ export const useRequestsStore = defineStore('requests', () => {
   }
 
   const createRequest = async (input: CreateRequestInput): Promise<Request> => {
-    const rustInput = {
-      collection_id: input.collectionId,
-      name: input.name,
-      method: input.method,
-      url: input.url,
-      params: input.params || null,
-      headers: input.headers || null,
-      body: input.body || null,
-      auth: input.auth || null,
-      pre_request_script: input.preRequestScript || null,
-      test_script: input.testScript || null,
+    try {
+      const rustInput = {
+        collection_id: input.collectionId,
+        name: input.name,
+        method: input.method,
+        url: input.url,
+        params: input.params || null,
+        headers: input.headers || null,
+        body: input.body || null,
+        auth: input.auth || null,
+        pre_request_script: input.preRequestScript || null,
+        test_script: input.testScript || null,
+      }
+      const result = await invoke<RustRequest>('create_request', { input: rustInput })
+      const request = transformFromRust(result)
+      requests.value.push(request)
+      return request
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e)
+      throw e
     }
-    const result = await invoke<RustRequest>('create_request', { input: rustInput })
-    const request = transformFromRust(result)
-    requests.value.unshift(request)
-    return request
   }
 
   const updateRequest = async (input: UpdateRequestInput): Promise<void> => {
-    const rustInput = {
-      id: input.id,
-      collection_id: input.collectionId || null,
-      name: input.name || null,
-      method: input.method || null,
-      url: input.url || null,
-      params: input.params !== undefined ? input.params : null,
-      headers: input.headers !== undefined ? input.headers : null,
-      body: input.body !== undefined ? input.body : null,
-      auth: input.auth !== undefined ? input.auth : null,
-      pre_request_script: input.preRequestScript !== undefined ? input.preRequestScript : null,
-      test_script: input.testScript !== undefined ? input.testScript : null,
-    }
-    await invoke('update_request', { input: rustInput })
-    const index = requests.value.findIndex(r => r.id === input.id)
-    if (index !== -1) {
-      const existing = requests.value[index]
-      requests.value[index] = {
-        ...existing,
-        collectionId: input.collectionId ?? existing.collectionId,
-        name: input.name ?? existing.name,
-        method: input.method ?? existing.method,
-        url: input.url ?? existing.url,
-        params: input.params !== undefined ? input.params : existing.params,
-        headers: input.headers !== undefined ? input.headers : existing.headers,
-        body: input.body !== undefined ? input.body : existing.body,
-        auth: input.auth !== undefined ? input.auth : existing.auth,
-        preRequestScript: input.preRequestScript !== undefined ? input.preRequestScript : existing.preRequestScript,
-        testScript: input.testScript !== undefined ? input.testScript : existing.testScript,
-        updatedAt: new Date().toISOString(),
+    try {
+      const rustInput = {
+        id: input.id,
+        collection_id: input.collectionId !== undefined ? input.collectionId : null,
+        name: input.name !== undefined ? input.name : null,
+        method: input.method !== undefined ? input.method : null,
+        url: input.url !== undefined ? input.url : null,
+        params: input.params !== undefined ? input.params : null,
+        headers: input.headers !== undefined ? input.headers : null,
+        body: input.body !== undefined ? input.body : null,
+        auth: input.auth !== undefined ? input.auth : null,
+        pre_request_script: input.preRequestScript !== undefined ? input.preRequestScript : null,
+        test_script: input.testScript !== undefined ? input.testScript : null,
       }
+      await invoke('update_request', { input: rustInput })
+      const index = requests.value.findIndex(r => r.id === input.id)
+      if (index !== -1) {
+        const existing = requests.value[index]
+        requests.value[index] = {
+          ...existing,
+          collectionId: input.collectionId ?? existing.collectionId,
+          name: input.name ?? existing.name,
+          method: input.method ?? existing.method,
+          url: input.url ?? existing.url,
+          params: input.params !== undefined ? input.params : existing.params,
+          headers: input.headers !== undefined ? input.headers : existing.headers,
+          body: input.body !== undefined ? input.body : existing.body,
+          auth: input.auth !== undefined ? input.auth : existing.auth,
+          preRequestScript: input.preRequestScript !== undefined ? input.preRequestScript : existing.preRequestScript,
+          testScript: input.testScript !== undefined ? input.testScript : existing.testScript,
+          updatedAt: new Date().toISOString(),
+        }
+      }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e)
+      throw e
     }
   }
 
   const deleteRequest = async (id: string): Promise<void> => {
-    await invoke('delete_request', { id })
-    requests.value = requests.value.filter(r => r.id !== id)
+    try {
+      await invoke('delete_request', { id })
+      requests.value = requests.value.filter(r => r.id !== id)
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e)
+      throw e
+    }
   }
 
   const getByCollection = (collectionId: string): Request[] => {
@@ -182,10 +197,7 @@ export const useRequestsStore = defineStore('requests', () => {
     collectionRequests.splice(targetIndex, 0, removed)
 
     collectionRequests.forEach((req, index) => {
-      const request = requests.value.find(r => r.id === req.id)
-      if (request) {
-        request.position = index
-      }
+      req.position = index
     })
 
     // Persist to backend

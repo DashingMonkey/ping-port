@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import CodeEditor from '../common/CodeEditor.vue'
@@ -80,7 +80,18 @@ function stopResize() {
   document.removeEventListener('mouseup', stopResize)
 }
 
+onUnmounted(() => {
+  document.removeEventListener('mousemove', onResize)
+  document.removeEventListener('mouseup', stopResize)
+})
+
 async function openScriptsReferenceWindow() {
+  const existing = await WebviewWindow.getByLabel('pp-scripts-reference')
+  if (existing) {
+    await existing.setFocus()
+    return
+  }
+
   const webview = new WebviewWindow('pp-scripts-reference', {
     url: '/pp-scripts-reference.html',
     title: t('scripts.scriptsReference'),
@@ -100,7 +111,7 @@ async function openScriptsReferenceWindow() {
 <template>
   <div class="flex flex-row h-full">
     <!-- Left Menu -->
-    <div class="w-36 border-r border-border flex flex-col pt-2 gap-1">
+    <div class="w-36 border-r border-border-default flex flex-col pt-2 gap-1">
       <button
         v-for="(config, key) in scriptConfig"
         :key="key"

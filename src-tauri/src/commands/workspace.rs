@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
-static WORKSPACE_NAME_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
-    regex::Regex::new(r"^[a-zA-Z0-9_\-\. ]+$").unwrap()
-});
+// Note: regex's \p{L} requires the unicode-gencat feature which may not
+// always be enabled. We validate characters manually in validate_workspace_name
+// to reliably support Unicode letters (Chinese, Japanese, etc.).
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WorkspaceInfo {
@@ -36,18 +36,27 @@ fn validate_workspace_name(name: &str) -> Result<(), String> {
     if name.is_empty() {
         return Err("Workspace name cannot be empty".to_string());
     }
-    if name.len() > 64 {
+    if name.chars().count() > 64 {
         return Err("Workspace name too long (max 64 characters)".to_string());
     }
-    if !WORKSPACE_NAME_RE.is_match(name) {
-        return Err(
-            "Workspace name can only contain letters, numbers, spaces, underscores, hyphens, and dots"
-                .to_string(),
-        );
-    }
-    // Explicitly reject path traversal patterns
+    // Reject path traversal patterns early
     if name.contains("..") || name.contains('/') || name.contains('\\') {
         return Err("Workspace name contains invalid characters".to_string());
+    }
+    // Allow Unicode letters/numbers (Chinese, Japanese, etc.), plus
+    // underscore, hyphen, dot, and space. Reject everything else.
+    for ch in name.chars() {
+        if !ch.is_alphanumeric()
+            && ch != '_'
+            && ch != '-'
+            && ch != '.'
+            && ch != ' '
+        {
+            return Err(
+                "Workspace name can only contain letters, numbers, spaces, underscores, hyphens, and dots"
+                    .to_string(),
+            );
+        }
     }
     Ok(())
 }
@@ -194,25 +203,26 @@ pub async fn rename_workspace(
     }
 
     // Check if renaming the currently active workspace
-    let app_state = state.lock().map_err(|e| e.to_string())?;
-    let is_current = *app_state
-        .db
-        .path
-        .lock()
-        .map_err(|e| format!("Internal error: {}", e))?
-        == old_path;
+    let is_current = {
+        let app_state = state.lock().map_err(|e| e.to_string())?;
+        let is_current = *app_state
+            .db
+            .path
+            .lock()
+            .map_err(|e| format!("Internal error: {}", e))?
+            == old_path;
+
+        if is_current {
+            app_state
+                .db
+                .close()
+                .map_err(|e| format!("Failed to close database: {}", e))?;
+        }
+        is_current
+    };
 
     if is_current {
-        drop(app_state);
-        let state_guard = state.lock().map_err(|e| e.to_string())?;
-        state_guard
-            .db
-            .close()
-            .map_err(|e| format!("Failed to close database: {}", e))?;
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        drop(state_guard);
-    } else {
-        drop(app_state);
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
     std::fs::rename(&old_path, &new_path)
@@ -244,8 +254,6 @@ pub async fn rename_workspace(
     // Reconnect to the renamed database so subsequent operations work correctly
     if is_current {
         *app_state.db.path.lock().map_err(|e| format!("Internal error: {}", e))? = new_path.clone();
-        drop(app_state);
-        let app_state = state.lock().map_err(|e| e.to_string())?;
         app_state
             .db
             .switch_db(&new_path)
@@ -361,9 +369,12 @@ pub async fn init_workspace(
         .map_err(|e| format!("Failed to open database: {}", e))?;
 
     // Register AppState
+    let http_client = crate::http::client::HttpClient::new()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
     let state = crate::AppState {
         db: Arc::new(db),
         current_workspace: Mutex::new(Some(workspace_name.clone())),
+        http_client,
     };
     app_handle.manage(Mutex::new(state));
 

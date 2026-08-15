@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import type { Tab, Draft, RequestState } from './types'
+import type { Tab, Draft, RequestState, RequestSubTab } from './types'
 
 const getTabsKey = () => {
   const wsName = localStorage.getItem('pingport-last-workspace') || 'default'
@@ -16,6 +16,9 @@ export const useTabsStore = defineStore('tabs', () => {
   const tabs = ref<Tab[]>([])
   const drafts = ref<Draft[]>([])
   const activeTabId = ref<string | null>(null)
+  // Session-only memory map: remembers the selected sub-tab per top-level tab.
+  // Intentionally NOT persisted — resets to default on app restart.
+  const subTabs = ref<Record<string, RequestSubTab>>({})
 
   const activeTab = computed(() => tabs.value.find(t => t.id === activeTabId.value) || null)
   const activeDraft = computed(() => {
@@ -31,14 +34,18 @@ export const useTabsStore = defineStore('tabs', () => {
         const parsed = JSON.parse(stored)
         tabs.value = parsed.tabs || []
         activeTabId.value = parsed.activeTabId || null
-      } catch {}
+      } catch (e) {
+        console.warn('Failed to parse tabs:', e)
+      }
     }
     const draftsKey = getDraftsKey()
     const draftsStored = localStorage.getItem(draftsKey)
     if (draftsStored) {
       try {
         drafts.value = JSON.parse(draftsStored)
-      } catch {}
+      } catch (e) {
+        console.warn('Failed to parse drafts:', e)
+      }
     }
   }
 
@@ -70,6 +77,9 @@ export const useTabsStore = defineStore('tabs', () => {
       drafts.value.splice(draftIndex, 1)
     }
 
+    // Clean up remembered sub-tab
+    delete subTabs.value[tabId]
+
     // Update activeTabId if closing the active tab
     if (activeTabId.value === tabId) {
       if (tabs.value[index - 1]) {
@@ -84,6 +94,12 @@ export const useTabsStore = defineStore('tabs', () => {
 
   const setActiveTab = (tabId: string) => {
     activeTabId.value = tabId
+  }
+
+  const getSubTab = (tabId: string): RequestSubTab => subTabs.value[tabId] ?? 'params'
+
+  const setSubTab = (tabId: string, subTab: RequestSubTab) => {
+    subTabs.value[tabId] = subTab
   }
 
   const updateTabTitle = (tabId: string, title: string) => {
@@ -131,7 +147,7 @@ export const useTabsStore = defineStore('tabs', () => {
     const draft = drafts.value.find(d => d.id === draftId)
     if (draft) {
       draft.changesCount = 0
-      draft.originalState = { ...draft.state }
+      draft.originalState = JSON.parse(JSON.stringify(draft.state))
     }
   }
 
@@ -140,11 +156,24 @@ export const useTabsStore = defineStore('tabs', () => {
     return draft ? draft.changesCount > 0 : false
   }
 
-  // Auto-save tabs and drafts to localStorage
-  watch([tabs, drafts, activeTabId], () => {
+  // Auto-save tabs and drafts to localStorage (debounced)
+  let saveTimer: ReturnType<typeof setTimeout> | null = null
+  const persist = () => {
+    if (saveTimer) {
+      clearTimeout(saveTimer)
+      saveTimer = null
+    }
     localStorage.setItem(getTabsKey(), JSON.stringify({ tabs: tabs.value, activeTabId: activeTabId.value }))
     localStorage.setItem(getDraftsKey(), JSON.stringify(drafts.value))
+  }
+  watch([tabs, drafts, activeTabId], () => {
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(persist, 500)
   }, { flush: 'post', deep: true })
+
+  // Flush pending save when app is closing (debounce window would otherwise lose data)
+  window.addEventListener('beforeunload', persist)
+  window.addEventListener('pagehide', persist)
 
   return {
     tabs,
@@ -156,6 +185,8 @@ export const useTabsStore = defineStore('tabs', () => {
     createTab,
     closeTab,
     setActiveTab,
+    getSubTab,
+    setSubTab,
     updateTabTitle,
     bindTabToRequest,
     createDraft,
