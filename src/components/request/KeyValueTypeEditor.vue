@@ -24,18 +24,6 @@ const emit = defineEmits<{
 
 const effectiveVars = computed(() => props.variables ?? {})
 
-const uidMap = new WeakMap<object, number>()
-let nextId = 0
-
-function rowKey(item: KeyValuePair): number {
-  let uid = uidMap.get(item)
-  if (uid === undefined) {
-    uid = ++nextId
-    uidMap.set(item, uid)
-  }
-  return uid
-}
-
 function handleEnabledChange(index: number, enabled: boolean) {
   const newItems = [...props.modelValue]
   newItems[index] = { ...newItems[index], enabled }
@@ -120,7 +108,7 @@ function getFileName(path: string): string {
       <!-- Data Rows -->
       <div
         v-for="(item, index) in modelValue"
-        :key="rowKey(item)"
+        :key="index"
         class="grid grid-cols-[28px_1fr_1fr_80px_40px] divide-x divide-border-default border-t border-border-default group"
       >
         <div class="flex items-center justify-center h-6">
