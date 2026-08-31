@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { toast } from '../../composables/useToast'
 
 const { t } = useI18n()
 
@@ -27,16 +28,27 @@ const filteredVariables = computed<FlatVariable[]>(() => {
   }))
 })
 
-// New variable state
-const isAddingNew = ref(false)
+// Persistent add-row state
 const newKey = ref('')
 const newValue = ref('')
+const newKeyInputRef = ref<HTMLInputElement | null>(null)
 
-// Handle key change - save on blur
-function handleKeyChange(index: number, newKeyValue: string) {
+// Handle key change - save on blur; reject empty and duplicate keys
+function handleKeyChange(index: number, event: Event) {
+  const input = event.target as HTMLInputElement
+  const newKey = input.value.trim()
   const item = filteredVariables.value[index]
-  if (newKeyValue.trim() !== item.key) {
-    emit('updateVariable', item.key, newKeyValue.trim(), item.value)
+  if (!newKey) {
+    input.value = item.key
+    return
+  }
+  if (newKey !== item.key && props.variables[newKey] !== undefined) {
+    toast.error(t('keyValue.duplicateKey'))
+    input.value = item.key
+    return
+  }
+  if (newKey !== item.key) {
+    emit('updateVariable', item.key, newKey, item.value)
   }
 }
 
@@ -48,144 +60,112 @@ function handleValueChange(index: number, newValue: string) {
   }
 }
 
-// Start adding new
-function startAddNew() {
-  isAddingNew.value = true
+// Save the persistent add-row (Enter)
+function commitNew() {
+  const key = newKey.value.trim()
+  if (!key) {
+    // Value without a key: keep everything, send focus back to the key input
+    newKeyInputRef.value?.focus()
+    return
+  }
+  if (props.variables[key] !== undefined) {
+    toast.error(t('keyValue.duplicateKey'))
+    newKeyInputRef.value?.focus()
+    return
+  }
+  emit('addVariable', key, newValue.value)
   newKey.value = ''
   newValue.value = ''
+  newKeyInputRef.value?.focus()
 }
 
-// Save new variable
-function saveNew() {
-  const key = newKey.value.trim()
-  const value = newValue.value
-  if (key) {
-    emit('addVariable', key, value)
-  }
-  cancelAdd()
-}
-
-function cancelAdd() {
-  isAddingNew.value = false
+function clearNew() {
   newKey.value = ''
   newValue.value = ''
 }
 </script>
 
 <template>
-  <div class="space-y-0">
-    <!-- Table wrapper -->
-    <div class="border-b border-border-default">
-      <!-- Header Row -->
-      <div class="grid grid-cols-[1fr_1fr_40px] divide-x divide-border-default bg-surface-base">
-        <div class="px-3 flex items-center h-6">
-          <span class="text-[10px] font-semibold tracking-wide text-text-muted uppercase">{{ t('keyValue.name') }}</span>
-        </div>
-        <div class="px-3 flex items-center h-6">
-          <span class="text-[10px] font-semibold tracking-wide text-text-muted uppercase">{{ t('keyValue.value') }}</span>
-        </div>
-        <div class="flex items-center justify-center h-6">
-          <span class="w-4"></span>
-        </div>
-      </div>
+  <div>
+    <!-- Header Row -->
+    <div class="grid grid-cols-[1fr_1fr_36px] h-[26px] items-center border-b border-border-default sticky top-0 bg-surface-base z-10">
+      <div class="px-2.5 text-[11px] text-text-muted">{{ t('keyValue.name') }}</div>
+      <div class="px-2.5 text-[11px] text-text-muted">{{ t('keyValue.value') }}</div>
+      <div></div>
+    </div>
 
-      <!-- Data Rows -->
-      <div
-        v-for="(item, index) in filteredVariables"
-        :key="item.key"
-        class="grid grid-cols-[1fr_1fr_40px] divide-x divide-border-default border-t border-border-default group"
-      >
-        <!-- Key column -->
+    <!-- Empty hint -->
+    <div v-if="filteredVariables.length === 0" class="px-2.5 py-3 text-xs text-text-muted">
+      {{ t('keyValue.noVariables') }}
+    </div>
+
+    <!-- Data Rows -->
+    <div
+      v-for="(item, index) in filteredVariables"
+      :key="item.key"
+      class="group grid grid-cols-[1fr_1fr_36px] h-7 items-center border-b border-border-default hover:bg-list-hover transition-colors"
+    >
+      <!-- Key column -->
+      <div class="p-0.5">
         <input
           type="text"
           :value="item.key"
-          @change="handleKeyChange(index, ($event.target as HTMLInputElement).value)"
+          @change="handleKeyChange(index, $event)"
           :placeholder="t('keyValue.name')"
-          class="w-full h-6 px-3 text-[10px] border-0 bg-transparent focus:outline-none text-text-primary placeholder-text-muted font-['JetBrains_Mono']"
+          class="w-full h-[22px] px-1.5 text-[13px] bg-transparent border border-transparent rounded-[3px] outline-none text-text-primary placeholder-text-muted hover:border-border-default focus:bg-input-bg focus:border-border-focus transition-colors"
         />
+      </div>
 
-        <!-- Value column -->
+      <!-- Value column -->
+      <div class="p-0.5">
         <input
           type="text"
           :value="item.value"
           @change="handleValueChange(index, ($event.target as HTMLInputElement).value)"
           :placeholder="t('keyValue.value')"
-          class="w-full h-6 px-3 text-[10px] border-0 bg-transparent focus:outline-none text-text-primary placeholder-text-muted font-['JetBrains_Mono']"
+          class="w-full h-[22px] px-1.5 text-[12.5px] font-['JetBrains_Mono'] bg-transparent border border-transparent rounded-[3px] outline-none text-text-primary placeholder-text-muted hover:border-border-default focus:bg-input-bg focus:border-border-focus transition-colors"
         />
-
-        <!-- Delete column -->
-        <div class="flex items-center justify-center h-6">
-          <button
-            type="button"
-            @click="emit('deleteVariable', item.key)"
-            class="p-1 text-text-muted hover:text-error hover:bg-error/10 opacity-30 hover:opacity-100 transition-opacity duration-150 cursor-pointer"
-            :title="t('keyValue.delete')"
-          >
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
-        </div>
       </div>
 
-      <!-- New variable row -->
-      <div
-        v-if="isAddingNew"
-        class="grid grid-cols-[1fr_1fr_40px] divide-x divide-border-default border-t border-border-default"
-      >
+      <!-- Delete column -->
+      <div class="flex items-center justify-center">
+        <button
+          type="button"
+          @click="emit('deleteVariable', item.key)"
+          class="p-1 text-text-muted hover:text-error hover:bg-error/10 rounded opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer"
+          :title="t('keyValue.delete')"
+        >
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Persistent add row -->
+    <div class="grid grid-cols-[1fr_1fr_36px] h-7 items-center border-b border-border-default hover:bg-list-hover transition-colors">
+      <div class="p-0.5">
         <input
+          ref="newKeyInputRef"
           v-model="newKey"
           type="text"
-          :placeholder="t('keyValue.name')"
-          class="w-full h-6 px-3 text-[10px] border-0 bg-surface-deep focus:outline-none text-text-primary placeholder-text-muted font-['JetBrains_Mono']"
-          @keyup.enter="saveNew"
-          @keyup.escape="cancelAdd"
-          autofocus
+          :placeholder="t('keyValue.addVariable')"
+          class="w-full h-[22px] px-1.5 text-[13px] bg-transparent border border-transparent rounded-[3px] outline-none text-text-primary placeholder-text-muted hover:border-border-default focus:bg-input-bg focus:border-border-focus transition-colors"
+          @keyup.enter="commitNew"
+          @keyup.escape="clearNew"
         />
+      </div>
+      <div class="p-0.5">
         <input
           v-model="newValue"
           type="text"
           :placeholder="t('keyValue.value')"
-          class="w-full h-6 px-3 text-[10px] border-0 bg-surface-deep focus:outline-none text-text-primary placeholder-text-muted font-['JetBrains_Mono']"
-          @keyup.enter="saveNew"
-          @keyup.escape="cancelAdd"
+          class="w-full h-[22px] px-1.5 text-[12.5px] font-['JetBrains_Mono'] bg-transparent border border-transparent rounded-[3px] outline-none text-text-primary placeholder-text-muted hover:border-border-default focus:bg-input-bg focus:border-border-focus transition-colors"
+          @keyup.enter="commitNew"
+          @keyup.escape="clearNew"
         />
-        <div class="flex items-center justify-center h-6">
-          <button
-            @click="saveNew"
-            class="p-1 text-success hover:bg-success/10 transition-colors"
-            :title="t('keyValue.save')"
-          >
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
-          </button>
-        </div>
       </div>
-    </div>
-
-    <!-- Add Button -->
-    <button
-      v-if="!isAddingNew"
-      type="button"
-      @click="startAddNew"
-      class="inline-flex items-center gap-1 px-2 py-1 text-xs text-accent hover:text-cyan-300 hover:bg-surface-elevated transition-colors duration-150 font-['IBM_Plex_Sans']"
-    >
-      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-      </svg>
-      {{ t('keyValue.addVariable') }}
-    </button>
-
-    <!-- Empty state -->
-    <div
-      v-if="filteredVariables.length === 0 && !isAddingNew"
-      class="p-8 text-center text-text-muted"
-    >
-      <svg class="w-10 h-10 mx-auto text-text-muted/50 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-      </svg>
-      <div class="text-sm font-medium text-text-primary">{{ t('keyValue.noVariables') }}</div>
+      <div></div>
     </div>
   </div>
 </template>

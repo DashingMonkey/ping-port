@@ -132,6 +132,7 @@ const zh: typeof en = {
     name: 'Name',
     noVariables: '无变量',
     addVariable: '添加变量',
+    duplicateKey: '变量名已存在',
     save: '保存',
     selectFile: '选择文件',
     selectFilePlaceholder: '点击选择文件',
@@ -169,6 +170,10 @@ const zh: typeof en = {
     createFailed: '创建环境失败',
     deleteFailed: '删除环境失败',
     updateFailed: '更新环境失败',
+    searchPlaceholder: '搜索环境…',
+    varCount: '{count} 个变量',
+    duplicate: '复制环境',
+    copyOf: '复制 - {name}',
   },
   workspace: {
     label: '工作区:',

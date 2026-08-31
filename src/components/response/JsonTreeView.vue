@@ -91,10 +91,10 @@ function formatValue(val: unknown): string {
 }
 
 function getValueClass(val: unknown): string {
-  if (val === null) return 'text-slate-600 dark:text-slate-400'
-  if (typeof val === 'string') return 'text-[#368422] dark:text-emerald-400'
-  if (typeof val === 'number') return 'text-sky-600 dark:text-sky-400'
-  if (typeof val === 'boolean') return 'text-amber-600 dark:text-amber-400'
+  if (val === null) return 'text-json-boolean'
+  if (typeof val === 'string') return 'text-json-string'
+  if (typeof val === 'number') return 'text-json-number'
+  if (typeof val === 'boolean') return 'text-json-boolean'
   return 'text-inherit'
 }
 
@@ -108,10 +108,10 @@ async function copyAsJson() {
 </script>
 
 <template>
-  <div class="font-mono text-[13px]" :style="{ paddingLeft: depth > 0 ? '16px' : '0' }">
+  <div class="font-mono text-[13px]">
     <div
       v-if="isExpandable"
-      class="flex items-center gap-1 py-px cursor-pointer hover:bg-surface-elevated rounded"
+      class="flex items-center gap-1 py-px cursor-pointer hover:bg-list-hover rounded"
       @click="toggle"
       @contextmenu="handleContextMenu"
     >
@@ -122,20 +122,20 @@ async function copyAsJson() {
       >
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
       </svg>
-      <span v-if="keyName !== null" class="text-[#347896] dark:text-cyan-400">{{ keyName }}</span>
-      <span v-if="keyName !== null" class="text-slate-500 mx-1">:</span>
-      <span class="text-warning text-[11px]">{{ typeLabel }}</span>
+      <span v-if="keyName !== null" class="text-json-key">{{ keyName }}</span>
+      <span v-if="keyName !== null" class="text-text-muted mx-1">:</span>
+      <span class="text-text-muted text-[11px]">{{ typeLabel }}</span>
       <span v-if="!expanded" class="text-text-muted">{{ collapsedLabel }}</span>
     </div>
 
-    <div v-else class="flex items-center gap-1 py-px cursor-pointer hover:bg-surface-elevated rounded" @contextmenu="handleContextMenu">
+    <div v-else class="flex items-center gap-1 py-px cursor-pointer hover:bg-list-hover rounded" @contextmenu="handleContextMenu">
       <span class="w-3.5"></span>
-      <span v-if="keyName !== null" class="text-[#347896] dark:text-cyan-400">{{ keyName }}</span>
-      <span v-if="keyName !== null" class="text-slate-500 mx-1">:</span>
+      <span v-if="keyName !== null" class="text-json-key">{{ keyName }}</span>
+      <span v-if="keyName !== null" class="text-text-muted mx-1">:</span>
       <span :class="getValueClass(data)">{{ formatValue(data) }}</span>
     </div>
 
-    <div v-if="isExpandable && expanded">
+    <div v-if="isExpandable && expanded" class="ml-[7px] pl-[8px] border-l border-indent-guide">
       <div v-for="[key, val] in entries" :key="key">
         <JsonTreeView
           v-if="val !== null && typeof val === 'object'"
@@ -143,10 +143,10 @@ async function copyAsJson() {
           :key-name="key"
           :depth="depth + 1"
         />
-        <div v-else class="flex items-center gap-1 py-px cursor-pointer hover:bg-surface-elevated rounded" :style="{ paddingLeft: '16px' }" @contextmenu="(e) => handleChildContextMenu(e, key, val)">
+        <div v-else class="flex items-center gap-1 py-px cursor-pointer hover:bg-list-hover rounded" @contextmenu="(e) => handleChildContextMenu(e, key, val)">
           <span class="w-3.5"></span>
-          <span class="text-[#347896] dark:text-cyan-400">{{ key }}</span>
-          <span class="text-slate-500 mx-1">:</span>
+          <span class="text-json-key">{{ key }}</span>
+          <span class="text-text-muted mx-1">:</span>
           <span :class="getValueClass(val)">{{ formatValue(val) }}</span>
         </div>
       </div>

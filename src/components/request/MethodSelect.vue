@@ -45,7 +45,7 @@ function handleUpdate(method: HttpMethod) {
   >
     <div class="relative">
       <ListboxButton
-        class="flex items-center gap-2 px-2 py-1.5 text-xs font-semibold rounded-l-md border border-border-default bg-surface-base focus:outline-none w-[80px] font-['JetBrains_Mono'] text-[11px]"
+        class="flex items-center gap-2 px-2 py-1.5 text-xs font-semibold rounded-l-md border border-border-default bg-surface-base focus:outline-none min-w-[76px] whitespace-nowrap font-['JetBrains_Mono'] text-[11px]"
         :class="[methodBgColors[modelValue], methodColors[modelValue]]"
       >
         <span>{{ modelValue }}</span>

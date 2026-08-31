@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import JsonTreeView from './JsonTreeView.vue'
 
@@ -68,6 +68,12 @@ const canPreview = computed(() => isHtml.value || isXml.value)
 function setViewMode(mode: 'pretty' | 'raw' | 'preview') {
   viewMode.value = mode
 }
+
+// New response may not support the current mode (preview needs HTML/XML):
+// reset to pretty so the body never renders as a blank area
+watch(() => props.body, () => {
+  viewMode.value = 'pretty'
+})
 </script>
 
 <template>
@@ -81,47 +87,36 @@ function setViewMode(mode: 'pretty' | 'raw' | 'preview') {
           {{ t('response.' + contentTypeKey) }}
         </span>
       </div>
-      <div class="flex items-center gap-1">
+      <div class="flex border border-border-default rounded-[3px] overflow-hidden">
         <button
           type="button"
           @click="setViewMode('pretty')"
-          class="inline-flex items-center px-2.5 py-1.5 text-[11px] font-medium rounded transition-colors duration-150"
+          class="px-3 py-1 text-[11px] font-medium transition-colors duration-150 cursor-pointer"
           :class="viewMode === 'pretty'
-            ? 'bg-accent/15 text-accent border border-accent/30'
-            : 'bg-surface-elevated text-text-secondary hover:text-text-primary border border-border-default'"
+            ? 'bg-list-active text-list-active-fg'
+            : 'text-text-secondary hover:bg-list-hover hover:text-text-primary'"
         >
-          <svg class="w-3.5 h-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
-          </svg>
           {{ t('response.pretty') }}
         </button>
         <button
           type="button"
           @click="setViewMode('raw')"
-          class="inline-flex items-center px-2.5 py-1.5 text-[11px] font-medium rounded transition-colors duration-150"
+          class="px-3 py-1 text-[11px] font-medium transition-colors duration-150 cursor-pointer border-l border-border-default"
           :class="viewMode === 'raw'
-            ? 'bg-accent/15 text-accent border border-accent/30'
-            : 'bg-surface-elevated text-text-secondary hover:text-text-primary border border-border-default'"
+            ? 'bg-list-active text-list-active-fg'
+            : 'text-text-secondary hover:bg-list-hover hover:text-text-primary'"
         >
-          <svg class="w-3.5 h-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7c-2 0-3 1-3 3z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h8M8 8h8M8 16h5" />
-          </svg>
           {{ t('response.raw') }}
         </button>
         <button
           v-if="canPreview"
           type="button"
           @click="setViewMode('preview')"
-          class="inline-flex items-center px-2.5 py-1.5 text-[11px] font-medium rounded transition-colors duration-150"
+          class="px-3 py-1 text-[11px] font-medium transition-colors duration-150 cursor-pointer border-l border-border-default"
           :class="viewMode === 'preview'
-            ? 'bg-accent/15 text-accent border border-accent/30'
-            : 'bg-surface-elevated text-text-secondary hover:text-text-primary border border-border-default'"
+            ? 'bg-list-active text-list-active-fg'
+            : 'text-text-secondary hover:bg-list-hover hover:text-text-primary'"
         >
-          <svg class="w-3.5 h-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-          </svg>
           {{ t('response.preview') }}
         </button>
       </div>

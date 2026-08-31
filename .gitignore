@@ -49,7 +49,6 @@ logs/
 .DS_Store
 Thumbs.db
 *.tmp
-*.bat
 
 # ================================
 # Cache / Temp

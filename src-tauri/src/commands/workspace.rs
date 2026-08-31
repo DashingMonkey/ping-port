@@ -83,13 +83,12 @@ fn find_workspace_path(app_handle: &tauri::AppHandle, name: &str) -> Option<Path
 }
 
 /// Scan all workspaces from exe directories
-#[tauri::command]
-pub async fn scan_workspaces(app_handle: tauri::AppHandle) -> Result<ScanResult, String> {
+fn scan_workspaces_list(app_handle: &tauri::AppHandle) -> Vec<WorkspaceInfo> {
     let mut workspaces = Vec::new();
     let mut seen_paths = std::collections::HashSet::new();
 
     // Scan exe directory
-    let exe_dir = get_exe_dir(&app_handle);
+    let exe_dir = get_exe_dir(app_handle);
 
     // Scan for *.db files directly in exe directory
     if let Ok(entries) = std::fs::read_dir(&exe_dir) {
@@ -135,32 +134,44 @@ pub async fn scan_workspaces(app_handle: tauri::AppHandle) -> Result<ScanResult,
         }
     }
 
-    Ok(ScanResult { workspaces })
+    workspaces
+}
+
+/// Scan all workspaces from exe directories
+#[tauri::command]
+pub async fn scan_workspaces(app_handle: tauri::AppHandle) -> Result<ScanResult, String> {
+    Ok(ScanResult {
+        workspaces: scan_workspaces_list(&app_handle),
+    })
+}
+
+/// Switch the active database to the given workspace (shared by command / init / MCP)
+pub fn switch_to_workspace(app_handle: &tauri::AppHandle, name: &str) -> Result<(), String> {
+    let db_path = find_workspace_path(app_handle, name)
+        .ok_or_else(|| format!("Workspace '{}' not found", name))?;
+
+    let state = app_handle.state::<std::sync::Mutex<crate::AppState>>();
+    let guard = state.lock().map_err(|e| e.to_string())?;
+    guard
+        .db
+        .switch_db(&db_path)
+        .map_err(|e| format!("Failed to switch database: {}", e))?;
+    *guard
+        .current_workspace
+        .lock()
+        .map_err(|e| format!("Internal error: {}", e))? = Some(name.to_string());
+
+    log::info!("Switched to workspace: {} at {:?}", name, db_path);
+    Ok(())
 }
 
 /// Switch to a different workspace
 #[tauri::command]
 pub async fn switch_workspace(
-    state: tauri::State<'_, std::sync::Mutex<crate::AppState>>,
     app_handle: tauri::AppHandle,
     name: String,
 ) -> Result<(), String> {
-    let db_path = find_workspace_path(&app_handle, &name)
-        .ok_or_else(|| format!("Workspace '{}' not found", name))?;
-
-    // Switch database
-    {
-        let db = state.lock().map_err(|e| e.to_string())?;
-        db.db
-            .switch_db(&db_path)
-            .map_err(|e| format!("Failed to switch database: {}", e))?;
-        *db.current_workspace
-            .lock()
-            .map_err(|e| format!("Internal error: {}", e))? = Some(name.clone());
-    }
-
-    log::info!("Switched to workspace: {} at {:?}", name, db_path);
-    Ok(())
+    switch_to_workspace(&app_handle, &name)
 }
 
 /// Get current workspace name
@@ -293,19 +304,24 @@ pub async fn exit_app(app_handle: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Initialize workspace: scan for db files, decide which to use, and register AppState
-#[derive(Debug, Serialize, Deserialize)]
-pub struct InitResult {
-    pub current_workspace: String,
-    pub workspaces: Vec<WorkspaceInfo>,
-}
+/// Ensure backend AppState is initialized: scan db files, pick default workspace,
+/// open database and register state. Idempotent. Called from app setup (before
+/// frontend loads) so backend-only consumers (MCP server) have a DB to work with.
+pub fn init_state(app_handle: &tauri::AppHandle) -> Result<String, String> {
+    if let Some(state) = app_handle.try_state::<std::sync::Mutex<crate::AppState>>() {
+        let guard = state.lock().map_err(|e| e.to_string())?;
+        if let Some(name) = guard
+            .current_workspace
+            .lock()
+            .map_err(|e| e.to_string())?
+            .clone()
+        {
+            return Ok(name);
+        }
+        return Err("Workspace state initialized without a workspace name".to_string());
+    }
 
-#[tauri::command]
-pub async fn init_workspace(
-    app_handle: tauri::AppHandle,
-    last_workspace_name: Option<String>,
-) -> Result<InitResult, String> {
-    let exe_dir = get_exe_dir(&app_handle);
+    let exe_dir = get_exe_dir(app_handle);
 
     // Scan for all .db files in exe directory
     let mut db_files: Vec<PathBuf> = std::fs::read_dir(&exe_dir)
@@ -320,46 +336,20 @@ pub async fn init_workspace(
 
     log::info!("Found {} db files in {:?}", db_files.len(), exe_dir);
 
-    // Determine which db to use
+    // No last workspace known at setup time: create default.db or use first available
     let (db_path, workspace_name) = if db_files.is_empty() {
-        // No db files exist, create default.db
         let path = exe_dir.join("default.db");
         log::info!("No existing database found, creating default.db");
         (path, "default".to_string())
     } else {
-        // Sort to get deterministic order
         db_files.sort();
-
-        if let Some(ref last) = last_workspace_name {
-            // Try to find the last workspace
-            let last_db_path = exe_dir.join(format!("{}.db", last));
-            if last_db_path.exists() {
-                log::info!("Using last workspace: {}", last);
-                (last_db_path, last.clone())
-            } else {
-                // Last workspace not found, use first available
-                let first_path = db_files.remove(0);
-                let first_name = first_path
-                    .file_stem()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "default".to_string());
-                log::info!(
-                    "Last workspace '{}' not found, using first: {}",
-                    last,
-                    first_name
-                );
-                (first_path, first_name)
-            }
-        } else {
-            // No last workspace specified, use first available
-            let first_path = db_files.remove(0);
-            let first_name = first_path
-                .file_stem()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_else(|| "default".to_string());
-            log::info!("Using first available workspace: {}", first_name);
-            (first_path, first_name)
-        }
+        let first_path = db_files.remove(0);
+        let first_name = first_path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "default".to_string());
+        log::info!("Using first available workspace: {}", first_name);
+        (first_path, first_name)
     };
 
     log::info!("Opening database: {:?}", db_path);
@@ -378,30 +368,48 @@ pub async fn init_workspace(
     };
     app_handle.manage(Mutex::new(state));
 
-    // Build workspaces list from db_files (remaining ones)
-    let workspaces: Vec<WorkspaceInfo> = db_files
+    log::info!("Backend workspace initialized: {}", workspace_name);
+    Ok(workspace_name)
+}
+
+/// Initialize workspace: scan for db files, decide which to use, and register AppState
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InitResult {
+    pub current_workspace: String,
+    pub workspaces: Vec<WorkspaceInfo>,
+}
+
+#[tauri::command]
+pub async fn init_workspace(
+    app_handle: tauri::AppHandle,
+    last_workspace_name: Option<String>,
+) -> Result<InitResult, String> {
+    // Backend setup normally registers AppState already; retry here covers
+    // the case where setup failed (e.g. db locked at startup).
+    let mut current = init_state(&app_handle)?;
+
+    // Restore the last workspace remembered by the frontend if it still exists
+    if let Some(last) = &last_workspace_name {
+        if *last != current && find_workspace_path(&app_handle, last).is_some() {
+            log::info!("Restoring last workspace: {}", last);
+            switch_to_workspace(&app_handle, last)?;
+            current = last.clone();
+        }
+    }
+
+    let workspaces: Vec<WorkspaceInfo> = scan_workspaces_list(&app_handle)
         .into_iter()
-        .map(|path| {
-            let name = path
-                .file_stem()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_default();
-            WorkspaceInfo {
-                name,
-                path: path.to_string_lossy().to_string(),
-                is_temporary: false,
-            }
-        })
+        .filter(|w| w.name != current)
         .collect();
 
     log::info!(
         "Workspace initialized: {}, found {} workspaces total",
-        workspace_name,
+        current,
         workspaces.len() + 1
     );
 
     Ok(InitResult {
-        current_workspace: workspace_name,
+        current_workspace: current,
         workspaces,
     })
 }

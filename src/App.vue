@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import AppLayout from './components/layout/AppLayout.vue'
 import EmptyState from './components/common/EmptyState.vue'
 import RequestPanel from './components/request/RequestPanel.vue'
 import { useI18n } from 'vue-i18n'
 import { useTabsStore } from './stores/tabs'
+import { useCollectionsStore } from './stores/collections'
 import { useRequestsStore } from './stores/requests'
 import { useSettingsStore } from './stores/settings'
 import { useWorkspaceStore } from './stores/workspace'
@@ -24,6 +26,7 @@ interface InitWorkspaceResult {
 
 const tabsStore = useTabsStore()
 const requestsStore = useRequestsStore()
+const collectionsStore = useCollectionsStore()
 const settingsStore = useSettingsStore()
 const workspaceStore = useWorkspaceStore()
 const { t } = useI18n()
@@ -31,6 +34,9 @@ const { t } = useI18n()
 const isInitializing = ref(true)
 const initError = ref<string | null>(null)
 const isRetrying = ref(false)
+// Bumped when an external writer (MCP) changes the open request without a
+// local draft, so the panel remounts with fresh data.
+const externalRequestVersion = ref(0)
 
 async function initializeApp() {
   isInitializing.value = true
@@ -99,7 +105,48 @@ async function finishInit() {
   }
 }
 
-onMounted(initializeApp)
+onMounted(async () => {
+  // Register external-sync listeners before initializing so MCP writes that
+  // land during init are not missed.
+  await setupExternalSync()
+  initializeApp()
+})
+
+/** Close tabs whose saved request no longer exists (e.g. deleted via MCP). */
+function closeOrphanTabs() {
+  const known = new Set(requestsStore.requests.map(r => r.id))
+  const orphanIds = tabsStore.tabs
+    .filter(tab => tab.requestId && !known.has(tab.requestId))
+    .map(tab => tab.id)
+  orphanIds.forEach(id => tabsStore.closeTab(id))
+}
+
+/** React to data written by external writers (the MCP server). */
+async function setupExternalSync() {
+  await listen<{ source?: string; ids?: string[] }>('collections-changed', async () => {
+    await collectionsStore.fetchCollections()
+  })
+
+  await listen<{ source?: string; ids?: string[] }>('requests-changed', async (event) => {
+    await requestsStore.fetchRequests()
+    closeOrphanTabs()
+
+    const tab = tabsStore.activeTab
+    const affected = event.payload?.ids
+    if (tab?.requestId && affected?.includes(tab.requestId)) {
+      // A draft exists for any opened request (created on panel mount), so
+      // the guard must check for unsaved edits, not draft existence.
+      const draft = tabsStore.drafts.find(d => d.tabId === tab.id)
+      const hasEdits = (draft?.changesCount ?? 0) > 0
+      if (!hasEdits) {
+        // Drop the clean draft so the remounted panel reloads the updated
+        // request instead of the stale draft state.
+        if (draft) tabsStore.removeDraft(draft.id)
+        externalRequestVersion.value++
+      }
+    }
+  })
+}
 
 const initialState = computed<RequestState | undefined>(() => {
   const tab = tabsStore.activeTab
@@ -193,7 +240,7 @@ function parseJson<T>(value: string | null, fallback: T): T {
     </div>
     <div v-else-if="tabsStore.activeTab && initialState" class="h-full">
       <RequestPanel
-        :key="tabsStore.activeTab?.id"
+        :key="`${tabsStore.activeTab.id}-${externalRequestVersion}`"
         :initial-state="initialState"
         :initial-title="initialTitle"
         :request-id="requestId"

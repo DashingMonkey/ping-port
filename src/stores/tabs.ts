@@ -151,6 +151,13 @@ export const useTabsStore = defineStore('tabs', () => {
     }
   }
 
+  const removeDraft = (draftId: string) => {
+    const index = drafts.value.findIndex(d => d.id === draftId)
+    if (index !== -1) {
+      drafts.value.splice(index, 1)
+    }
+  }
+
   const hasUnsavedChanges = (draftId: string): boolean => {
     const draft = drafts.value.find(d => d.id === draftId)
     return draft ? draft.changesCount > 0 : false
@@ -193,6 +200,7 @@ export const useTabsStore = defineStore('tabs', () => {
     markDirty,
     updateDraftState,
     markClean,
+    removeDraft,
     hasUnsavedChanges,
   }
 })

@@ -130,6 +130,7 @@ const en = {
     name: 'Name',
     noVariables: 'No variables',
     addVariable: 'Add Variable',
+    duplicateKey: 'Variable name already exists',
     save: 'Save',
     selectFile: 'Select File',
     selectFilePlaceholder: 'Click to select file',
@@ -167,6 +168,10 @@ const en = {
     createFailed: 'Failed to create environment',
     deleteFailed: 'Failed to delete environment',
     updateFailed: 'Failed to update environment',
+    searchPlaceholder: 'Search environments…',
+    varCount: '{count} variables',
+    duplicate: 'Duplicate environment',
+    copyOf: 'Copy of {name}',
   },
   workspace: {
     label: 'Workspace:',

@@ -1,7 +1,9 @@
 mod commands;
 mod db;
 mod http;
+pub mod mcp;
 pub mod scripting;
+mod services;
 
 use commands::collections::{
     create_collection, delete_collection, get_collections, reorder_collections, update_collection,
@@ -37,7 +39,7 @@ pub fn run() {
 
     check_webview2();
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             get_collections,
@@ -96,11 +98,26 @@ pub fn run() {
             }
 
             log::info!("PingPort setup complete, waiting for frontend init");
+
+            // Initialize workspace & AppState in the backend so the MCP server
+            // has a database to work with even before the frontend loads.
+            if let Err(e) = commands::workspace::init_state(app.handle()) {
+                log::error!(
+                    "Backend workspace init failed (frontend init will retry): {}",
+                    e
+                );
+            }
+
+            // Start the local MCP server for AI integration (stdio bridge + HTTP)
+            if let Err(e) = crate::mcp::start(app.handle().clone()) {
+                log::error!("Failed to start MCP server: {}", e);
+            }
+
             Ok(())
         })
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .unwrap_or_else(|e| {
-            let msg = format!("Error while running tauri application: {}", e);
+            let msg = format!("Error while building tauri application: {}", e);
             log::error!("{}", msg);
             rfd::MessageDialog::new()
                 .set_title("PingPort Error")
@@ -108,7 +125,16 @@ pub fn run() {
                 .set_level(rfd::MessageLevel::Error)
                 .set_buttons(rfd::MessageButtons::Ok)
                 .show();
+            std::process::exit(1);
         });
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            // Remove the MCP connection file so the stdio bridge never picks
+            // up a stale port/token from this run.
+            crate::mcp::cleanup_config(app_handle);
+        }
+    });
 }
 
 #[cfg(target_os = "windows")]
