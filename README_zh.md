@@ -75,42 +75,6 @@ ping-port/
 2. **集合级** - 从父集合继承的变量
 3. **全局/环境级** - 从选中环境获取的变量
 
-## 依赖列表
-
-### 前端（package.json）
-
-```
-vue@^3.5.32
-pinia@^3.0.4
-@headlessui/vue
-@tauri-apps/api@^2.0.0
-@tauri-apps/cli@^2.0.0
-@vitejs/plugin-vue@^5.0.0
-tailwindcss
-typescript
-vite
-vue-tsc
-```
-
-### 后端（Cargo.toml）
-
-```
-tauri@2
-tauri-plugin-shell
-tauri-plugin-window-state
-rusqlite (bundled)
-reqwest
-rquickjs
-tokio (full)
-uuid
-chrono
-serde/serde_json
-log/env_logger
-anyhow
-rfd
-regex
-```
-
 ## 构建
 
 ```bash
@@ -209,10 +173,3 @@ pp.response.time                      // 响应时间（毫秒）
 // 测试
 pp.test(name, fn)                     // 定义测试用例
 ```
-
-## 窗口与界面
-
-- 默认尺寸：1280x800，最小：900x600
-- 自定义无边框窗口，带标题栏控制按钮
-- 窗口状态持久化（大小、位置）
-- 类 VS Code 活动栏和侧边栏布局

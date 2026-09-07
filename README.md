@@ -75,42 +75,6 @@ Each workspace is a separate `.db` file located in the executable directory.
 2. **Collection-level** - Variables inherited from parent collection
 3. **Global/Environment** - Variables from selected environment
 
-## Dependencies
-
-### Frontend (package.json)
-
-```
-vue@^3.5.32
-pinia@^3.0.4
-@headlessui/vue
-@tauri-apps/api@^2.0.0
-@tauri-apps/cli@^2.0.0
-@vitejs/plugin-vue@^5.0.0
-tailwindcss
-typescript
-vite
-vue-tsc
-```
-
-### Backend (Cargo.toml)
-
-```
-tauri@2
-tauri-plugin-shell
-tauri-plugin-window-state
-rusqlite (bundled)
-reqwest
-rquickjs
-tokio (full)
-uuid
-chrono
-serde/serde_json
-log/env_logger
-anyhow
-rfd
-regex
-```
-
 ## Build
 
 ```bash
@@ -209,10 +173,3 @@ pp.response.time                       // Response time (ms)
 // Tests
 pp.test(name, fn)                      // Define test case
 ```
-
-## Window & UI
-
-- Default size: 1280x800, minimum: 900x600
-- Custom frameless window with title bar controls
-- Window state persistence (size, position)
-- VSCode-inspired activity bar and sidebar layout
