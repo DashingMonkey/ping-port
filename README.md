@@ -111,7 +111,7 @@ AI client --stdio--> PingPort.exe mcp-bridge --HTTP--> PingPort app (local MCP s
 Claude Code:
 
 ```bash
-claude mcp add pingport -- "C:/Path/To/PingPort.exe" mcp-bridge
+claude mcp add pingport -- "C:\Path\To\PingPort.exe" mcp-bridge
 ```
 
 Cursor / Claude Desktop / Trae / other JSON-based clients (adjust the executable path per platform):
@@ -120,7 +120,7 @@ Cursor / Claude Desktop / Trae / other JSON-based clients (adjust the executable
 {
   "mcpServers": {
     "pingport": {
-      "command": "C://Path//To//PingPort.exe",
+      "command": "C:\\Path\\To\\PingPort.exe",
       "args": ["mcp-bridge"]
     }
   }
@@ -173,3 +173,4 @@ pp.response.time                       // Response time (ms)
 // Tests
 pp.test(name, fn)                      // Define test case
 ```
+

@@ -111,7 +111,7 @@ AI 客户端 --stdio--> PingPort.exe mcp-bridge --HTTP--> PingPort 应用（内�
 Claude Code：
 
 ```bash
-claude mcp add pingport -- "C:/Path/To/PingPort.exe" mcp-bridge
+claude mcp add pingport -- "C:\Path\To\PingPort.exe" mcp-bridge
 ```
 
 Cursor / Claude Desktop / Trae 等使用 JSON 配置的客户端（按平台调整可执行文件路径）：
@@ -120,7 +120,7 @@ Cursor / Claude Desktop / Trae 等使用 JSON 配置的客户端（按平台调�
 {
   "mcpServers": {
     "pingport": {
-      "command": "C://Path//To//PingPort.exe",
+      "command": "C:\\Path\\To\\PingPort.exe",
       "args": ["mcp-bridge"]
     }
   }
@@ -173,3 +173,4 @@ pp.response.time                      // 响应时间（毫秒）
 // 测试
 pp.test(name, fn)                     // 定义测试用例
 ```
+
