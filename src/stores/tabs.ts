@@ -2,20 +2,15 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import type { Tab, Draft, RequestState, RequestSubTab } from './types'
 
-const getTabsKey = () => {
-  const wsName = localStorage.getItem('pingport-last-workspace') || 'default'
-  return `pingport-${wsName}-tabs`
-}
-
-const getDraftsKey = () => {
-  const wsName = localStorage.getItem('pingport-last-workspace') || 'default'
-  return `pingport-${wsName}-drafts`
-}
+const getTabsKey = (workspaceName: string) => `pingport-${workspaceName}-tabs`
+const getDraftsKey = (workspaceName: string) => `pingport-${workspaceName}-drafts`
 
 export const useTabsStore = defineStore('tabs', () => {
   const tabs = ref<Tab[]>([])
   const drafts = ref<Draft[]>([])
   const activeTabId = ref<string | null>(null)
+  let storageWorkspaceName = localStorage.getItem('pingport-last-workspace') || 'default'
+  let loaded = false
   // Session-only memory map: remembers the selected sub-tab per top-level tab.
   // Intentionally NOT persisted — resets to default on app restart.
   const subTabs = ref<Record<string, RequestSubTab>>({})
@@ -27,26 +22,37 @@ export const useTabsStore = defineStore('tabs', () => {
   })
 
   const loadTabs = () => {
-    const key = getTabsKey()
+    // A pending save belongs to the workspace being left. Flush it before
+    // switching the storage namespace, then discard any old in-memory state.
+    persist()
+    storageWorkspaceName = localStorage.getItem('pingport-last-workspace') || 'default'
+    tabs.value = []
+    drafts.value = []
+    activeTabId.value = null
+    subTabs.value = {}
+
+    const key = getTabsKey(storageWorkspaceName)
     const stored = localStorage.getItem(key)
     if (stored) {
       try {
         const parsed = JSON.parse(stored)
-        tabs.value = parsed.tabs || []
+        tabs.value = Array.isArray(parsed.tabs) ? parsed.tabs : []
         activeTabId.value = parsed.activeTabId || null
       } catch (e) {
         console.warn('Failed to parse tabs:', e)
       }
     }
-    const draftsKey = getDraftsKey()
+    const draftsKey = getDraftsKey(storageWorkspaceName)
     const draftsStored = localStorage.getItem(draftsKey)
     if (draftsStored) {
       try {
-        drafts.value = JSON.parse(draftsStored)
+        const parsed = JSON.parse(draftsStored)
+        drafts.value = Array.isArray(parsed) ? parsed : []
       } catch (e) {
         console.warn('Failed to parse drafts:', e)
       }
     }
+    loaded = true
   }
 
   const createTab = (requestId: string, method: string, title: string) => {
@@ -166,12 +172,22 @@ export const useTabsStore = defineStore('tabs', () => {
   // Auto-save tabs and drafts to localStorage (debounced)
   let saveTimer: ReturnType<typeof setTimeout> | null = null
   const persist = () => {
+    if (!loaded) return
     if (saveTimer) {
       clearTimeout(saveTimer)
       saveTimer = null
     }
-    localStorage.setItem(getTabsKey(), JSON.stringify({ tabs: tabs.value, activeTabId: activeTabId.value }))
-    localStorage.setItem(getDraftsKey(), JSON.stringify(drafts.value))
+    localStorage.setItem(getTabsKey(storageWorkspaceName), JSON.stringify({ tabs: tabs.value, activeTabId: activeTabId.value }))
+    localStorage.setItem(getDraftsKey(storageWorkspaceName), JSON.stringify(drafts.value))
+  }
+  const renameWorkspaceStorage = (oldName: string, newName: string) => {
+    if (storageWorkspaceName === oldName) persist()
+    for (const keyFor of [getTabsKey, getDraftsKey]) {
+      const value = localStorage.getItem(keyFor(oldName))
+      if (value !== null) localStorage.setItem(keyFor(newName), value)
+      localStorage.removeItem(keyFor(oldName))
+    }
+    if (storageWorkspaceName === oldName) storageWorkspaceName = newName
   }
   watch([tabs, drafts, activeTabId], () => {
     if (saveTimer) clearTimeout(saveTimer)
@@ -202,5 +218,7 @@ export const useTabsStore = defineStore('tabs', () => {
     markClean,
     removeDraft,
     hasUnsavedChanges,
+    persist,
+    renameWorkspaceStorage,
   }
 })

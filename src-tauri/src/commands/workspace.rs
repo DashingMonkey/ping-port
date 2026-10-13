@@ -46,12 +46,7 @@ fn validate_workspace_name(name: &str) -> Result<(), String> {
     // Allow Unicode letters/numbers (Chinese, Japanese, etc.), plus
     // underscore, hyphen, dot, and space. Reject everything else.
     for ch in name.chars() {
-        if !ch.is_alphanumeric()
-            && ch != '_'
-            && ch != '-'
-            && ch != '.'
-            && ch != ' '
-        {
+        if !ch.is_alphanumeric() && ch != '_' && ch != '-' && ch != '.' && ch != ' ' {
             return Err(
                 "Workspace name can only contain letters, numbers, spaces, underscores, hyphens, and dots"
                     .to_string(),
@@ -147,6 +142,7 @@ pub async fn scan_workspaces(app_handle: tauri::AppHandle) -> Result<ScanResult,
 
 /// Switch the active database to the given workspace (shared by command / init / MCP)
 pub fn switch_to_workspace(app_handle: &tauri::AppHandle, name: &str) -> Result<(), String> {
+    validate_workspace_name(name)?;
     let db_path = find_workspace_path(app_handle, name)
         .ok_or_else(|| format!("Workspace '{}' not found", name))?;
 
@@ -167,10 +163,7 @@ pub fn switch_to_workspace(app_handle: &tauri::AppHandle, name: &str) -> Result<
 
 /// Switch to a different workspace
 #[tauri::command]
-pub async fn switch_workspace(
-    app_handle: tauri::AppHandle,
-    name: String,
-) -> Result<(), String> {
+pub async fn switch_workspace(app_handle: tauri::AppHandle, name: String) -> Result<(), String> {
     switch_to_workspace(&app_handle, &name)
 }
 
@@ -196,6 +189,7 @@ pub async fn rename_workspace(
     old_name: String,
     new_name: String,
 ) -> Result<(), String> {
+    validate_workspace_name(&old_name)?;
     validate_workspace_name(&new_name)?;
     let exe_dir = get_exe_dir(&app_handle);
 
@@ -213,62 +207,53 @@ pub async fn rename_workspace(
         return Err(format!("Workspace '{}' already exists", new_name));
     }
 
-    // Check if renaming the currently active workspace
-    let is_current = {
-        let app_state = state.lock().map_err(|e| e.to_string())?;
-        let is_current = *app_state
-            .db
-            .path
-            .lock()
-            .map_err(|e| format!("Internal error: {}", e))?
-            == old_path;
-
-        if is_current {
-            app_state
-                .db
-                .close()
-                .map_err(|e| format!("Failed to close database: {}", e))?;
-        }
-        is_current
-    };
-
-    if is_current {
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    }
-
-    std::fs::rename(&old_path, &new_path)
-        .map_err(|e| format!("Failed to rename workspace: {}", e))?;
-
-    // Move WAL and SHM files
-    let wal_path = old_path.with_extension("db-wal");
-    let shm_path = old_path.with_extension("db-shm");
-    if wal_path.exists() {
-        std::fs::rename(&wal_path, new_path.with_extension("db-wal"))
-            .map_err(|e| format!("Failed to rename wal file: {}", e))?;
-    }
-    if shm_path.exists() {
-        std::fs::rename(&shm_path, new_path.with_extension("db-shm"))
-            .map_err(|e| format!("Failed to rename shm file: {}", e))?;
-    }
-
-    // Update current workspace in app state
+    // Keep the state lock throughout the rename so no command can switch
+    // databases while the active connection is temporarily closed.
     let app_state = state.lock().map_err(|e| e.to_string())?;
-    {
-        let mut cw = app_state
-            .current_workspace
-            .lock()
-            .map_err(|e| format!("Internal error: {}", e))?;
-        if cw.as_ref() == Some(&old_name) {
-            *cw = Some(new_name.clone());
-        }
-    }
-    // Reconnect to the renamed database so subsequent operations work correctly
+    let is_current = *app_state.db.path.lock().map_err(|e| e.to_string())? == old_path;
     if is_current {
-        *app_state.db.path.lock().map_err(|e| format!("Internal error: {}", e))? = new_path.clone();
         app_state
             .db
-            .switch_db(&new_path)
-            .map_err(|e| format!("Failed to reconnect to renamed workspace: {}", e))?;
+            .close()
+            .map_err(|e| format!("Failed to close database: {}", e))?;
+    } else {
+        // Checkpoint an inactive database too, so all data is in the main file.
+        let db = crate::db::Database::new(&old_path).map_err(|e| e.to_string())?;
+        db.close().map_err(|e| e.to_string())?;
+    }
+
+    if let Err(error) = std::fs::rename(&old_path, &new_path) {
+        if is_current {
+            app_state.db.switch_db(&old_path).map_err(|restore| {
+                format!(
+                    "Failed to rename workspace: {}; failed to reopen original: {}",
+                    error, restore
+                )
+            })?;
+        }
+        return Err(format!("Failed to rename workspace: {}", error));
+    }
+
+    if is_current {
+        if let Err(error) = app_state.db.switch_db(&new_path) {
+            std::fs::rename(&new_path, &old_path).map_err(|rollback| {
+                format!(
+                    "Failed to reopen renamed workspace: {}; rollback failed: {}",
+                    error, rollback
+                )
+            })?;
+            app_state.db.switch_db(&old_path).map_err(|restore| {
+                format!(
+                    "Failed to reopen renamed workspace: {}; restore failed: {}",
+                    error, restore
+                )
+            })?;
+            return Err(format!("Failed to reopen renamed workspace: {}", error));
+        }
+        *app_state
+            .current_workspace
+            .lock()
+            .map_err(|e| e.to_string())? = Some(new_name.clone());
     }
 
     log::info!("Renamed workspace '{}' to '{}'", old_name, new_name);
@@ -397,15 +382,14 @@ pub async fn init_workspace(
         }
     }
 
-    let workspaces: Vec<WorkspaceInfo> = scan_workspaces_list(&app_handle)
-        .into_iter()
-        .filter(|w| w.name != current)
-        .collect();
+    // The selector needs the current workspace too, to display its selected
+    // state on the first render just as it does after scan_workspaces.
+    let workspaces = scan_workspaces_list(&app_handle);
 
     log::info!(
         "Workspace initialized: {}, found {} workspaces total",
         current,
-        workspaces.len() + 1
+        workspaces.len()
     );
 
     Ok(InitResult {

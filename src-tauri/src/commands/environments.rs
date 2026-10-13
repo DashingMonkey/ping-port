@@ -48,7 +48,9 @@ pub fn get_environments(state: State<'_, Mutex<AppState>>) -> Result<Vec<Environ
     let app_state = get_db(&state)?;
     let db: &Database = &app_state.db;
     let conn_guard = db.conn.lock().map_err(|e| e.to_string())?;
-    let conn = conn_guard.as_ref().ok_or("Database is closed".to_string())?;
+    let conn = conn_guard
+        .as_ref()
+        .ok_or("Database is closed".to_string())?;
 
     let mut stmt = conn
         .prepare("SELECT id, name, COALESCE(variables, '{}'), created_at, updated_at FROM environments ORDER BY created_at DESC")
@@ -80,7 +82,9 @@ pub fn create_environment(
     let app_state = get_db(&state)?;
     let db: &Database = &app_state.db;
     let conn_guard = db.conn.lock().map_err(|e| e.to_string())?;
-    let conn = conn_guard.as_ref().ok_or("Database is closed".to_string())?;
+    let conn = conn_guard
+        .as_ref()
+        .ok_or("Database is closed".to_string())?;
 
     let now = chrono::Utc::now().to_rfc3339();
     let id = input.id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
@@ -110,19 +114,18 @@ pub fn update_environment(
     let app_state = get_db(&state)?;
     let db: &Database = &app_state.db;
     let conn_guard = db.conn.lock().map_err(|e| e.to_string())?;
-    let conn = conn_guard.as_ref().ok_or("Database is closed".to_string())?;
+    let conn = conn_guard
+        .as_ref()
+        .ok_or("Database is closed".to_string())?;
 
+    update_environment_in_db(conn, input)
+}
+
+fn update_environment_in_db(
+    conn: &rusqlite::Connection,
+    input: UpdateEnvironmentInput,
+) -> Result<(), String> {
     let now = chrono::Utc::now().to_rfc3339();
-
-    // Get current environment to merge variables
-    let mut stmt = conn
-        .prepare("SELECT variables FROM environments WHERE id = ?1")
-        .map_err(|e| e.to_string())?;
-    let current_variables: String = stmt
-        .query_row(params![input.id], |row| row.get(0))
-        .map_err(|e| e.to_string())?;
-
-    let mut variables = parse_variables(&current_variables);
 
     // Update name if provided
     let name = if let Some(name) = input.name {
@@ -135,12 +138,17 @@ pub fn update_environment(
             .map_err(|e| e.to_string())?
     };
 
-    // Merge variables if provided
-    if let Some(new_vars) = input.variables {
-        variables.extend(new_vars);
-    }
-
-    let variables_json = serialize_variables(&variables);
+    // `variables` is a complete replacement from the UI. Replacing the map
+    // lets users rename and remove keys without leaving stale entries behind.
+    let variables_json = if let Some(variables) = input.variables {
+        serialize_variables(&variables)
+    } else {
+        let mut stmt = conn
+            .prepare("SELECT variables FROM environments WHERE id = ?1")
+            .map_err(|e| e.to_string())?;
+        stmt.query_row(params![input.id], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?
+    };
 
     conn.execute(
         "UPDATE environments SET name = ?1, variables = ?2, updated_at = ?3 WHERE id = ?4",
@@ -156,7 +164,9 @@ pub fn delete_environment(id: String, state: State<'_, Mutex<AppState>>) -> Resu
     let app_state = get_db(&state)?;
     let db: &Database = &app_state.db;
     let conn_guard = db.conn.lock().map_err(|e| e.to_string())?;
-    let conn = conn_guard.as_ref().ok_or("Database is closed".to_string())?;
+    let conn = conn_guard
+        .as_ref()
+        .ok_or("Database is closed".to_string())?;
 
     conn.execute("DELETE FROM environments WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -173,7 +183,9 @@ pub fn delete_environment_variable(
     let app_state = get_db(&state)?;
     let db: &Database = &app_state.db;
     let conn_guard = db.conn.lock().map_err(|e| e.to_string())?;
-    let conn = conn_guard.as_ref().ok_or("Database is closed".to_string())?;
+    let conn = conn_guard
+        .as_ref()
+        .ok_or("Database is closed".to_string())?;
 
     // Get current variables
     let mut stmt = conn
@@ -196,4 +208,63 @@ pub fn delete_environment_variable(
     .map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn variable_rename_replaces_old_keys_and_name_only_update_preserves_variables() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        crate::db::migrations::run(&conn).unwrap();
+        conn.execute("INSERT INTO environments (id, name, variables, created_at, updated_at) VALUES ('env', 'Env', '{\"old\":\"value\"}', 'now', 'now')", []).unwrap();
+        update_environment_in_db(
+            &conn,
+            UpdateEnvironmentInput {
+                id: "env".into(),
+                name: None,
+                variables: Some(HashMap::from([("new".into(), "value".into())])),
+            },
+        )
+        .unwrap();
+        update_environment_in_db(
+            &conn,
+            UpdateEnvironmentInput {
+                id: "env".into(),
+                name: Some("Renamed".into()),
+                variables: None,
+            },
+        )
+        .unwrap();
+        let (name, variables): (String, String) = conn
+            .query_row(
+                "SELECT name, variables FROM environments WHERE id = 'env'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(name, "Renamed");
+        assert_eq!(
+            parse_variables(&variables),
+            HashMap::from([("new".into(), "value".into())])
+        );
+        update_environment_in_db(
+            &conn,
+            UpdateEnvironmentInput {
+                id: "env".into(),
+                name: None,
+                variables: Some(HashMap::new()),
+            },
+        )
+        .unwrap();
+        let variables: String = conn
+            .query_row(
+                "SELECT variables FROM environments WHERE id = 'env'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(variables, "{}");
+    }
 }

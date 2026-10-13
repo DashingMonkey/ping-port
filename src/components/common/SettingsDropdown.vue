@@ -4,12 +4,14 @@ import { Popover, PopoverButton, PopoverPanel } from '@headlessui/vue'
 import { useI18n } from 'vue-i18n'
 import { getVersion } from '@tauri-apps/api/app'
 import { useSettingsStore } from '../../stores/settings'
+import ImportExport from './ImportExport.vue'
 import type { Language } from '../../i18n'
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
 
 const appVersion = ref('')
+const importExportMode = ref<'import' | 'export' | null>(null)
 onMounted(async () => {
   try {
     appVersion.value = await getVersion()
@@ -66,10 +68,18 @@ function setLanguage(lang: Language) {
         </div>
       </div>
 
+      <div class="border-t border-border-default mt-2 pt-2 flex flex-col gap-1">
+        <button @click="importExportMode = 'import'; close()" class="text-left text-xs text-text-secondary hover:text-accent py-1">{{ t('importExport.importTitle') }}</button>
+        <button @click="importExportMode = 'export'; close()" class="text-left text-xs text-text-secondary hover:text-accent py-1">{{ t('importExport.exportTitle') }}</button>
+      </div>
+
       <!-- Version -->
       <div v-if="appVersion" class="border-t border-border-default mt-2 pt-2 text-center">
         <span class="text-[10px] text-text-muted">v{{ appVersion }}</span>
       </div>
     </PopoverPanel>
   </Popover>
+  <Teleport to="body">
+    <ImportExport v-if="importExportMode" :mode="importExportMode" @close="importExportMode = null" />
+  </Teleport>
 </template>

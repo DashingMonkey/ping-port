@@ -38,6 +38,12 @@ impl Database {
     }
 
     pub fn switch_db<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let mut current_path = self.path.lock().map_err(|e| {
+            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Mutex poisoned: {}", e),
+            )))
+        })?;
         let mut guard = self.conn.lock().map_err(|e| {
             rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -47,6 +53,7 @@ impl Database {
         let conn = Connection::open(path.as_ref())?;
         migrations::run(&conn)?;
         *guard = Some(conn);
+        *current_path = path.as_ref().to_path_buf();
         Ok(())
     }
 
@@ -64,5 +71,42 @@ impl Database {
         }
         *guard = None;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn switching_updates_path_and_keeps_original_on_failure() {
+        let dir = std::env::current_dir().unwrap().join("target");
+        std::fs::create_dir_all(&dir).unwrap();
+        let a = dir.join(format!("review-{}.db", uuid::Uuid::new_v4()));
+        let b = dir.join(format!("review-{}.db", uuid::Uuid::new_v4()));
+        let db = Database::new(&a).unwrap();
+        db.switch_db(&b).unwrap();
+        assert_eq!(*db.path.lock().unwrap(), b);
+        assert!(db
+            .switch_db(dir.join("missing-directory").join("bad.db"))
+            .is_err());
+        assert_eq!(*db.path.lock().unwrap(), b);
+        let value: i32 = db
+            .conn
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .query_row("SELECT 1", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(value, 1);
+        let renamed = b.with_extension("renamed.db");
+        db.close().unwrap();
+        std::fs::rename(&b, &renamed).unwrap();
+        db.switch_db(&renamed).unwrap();
+        assert_eq!(*db.path.lock().unwrap(), renamed);
+        db.close().unwrap();
+        std::fs::remove_file(a).unwrap();
+        std::fs::remove_file(renamed).unwrap();
     }
 }

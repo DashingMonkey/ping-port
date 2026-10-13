@@ -45,10 +45,5 @@
         "installerIcon": "icons/icon.ico"
       }
     }
-  },
-  "plugins": {
-    "window-state": {
-      "denylist": []
-    }
   }
 }

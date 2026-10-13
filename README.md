@@ -77,9 +77,14 @@ Each workspace is a separate `.db` file located in the executable directory.
 
 ## Build
 
+Requires Node.js 22.15+ (22.x) or 24+, Rust, and the Tauri platform prerequisites. Windows `build.bat` also uses Windows PowerShell to close the executable being rebuilt.
+
 ```bash
 # Install frontend dependencies
 npm install
+
+# Type-check Vue/TypeScript and run frontend regressions
+npm run check
 
 # Run in development mode
 npm run tauri dev
@@ -152,6 +157,10 @@ Cursor / Claude Desktop / Trae / other JSON-based clients (adjust the executable
 ## Scripting API
 
 Pre-request and test scripts run in a sandboxed JavaScript environment with the following API:
+
+Variables start from the current environment on each send. Script changes are shared only between the pre-request and test scripts of that send; they do not update the saved environment or carry over to the next send. Disabled headers/query rows are omitted from script input.
+
+For `form-data` and `x-www-form-urlencoded`, `pp.request.body` must be a JSON string containing a field array, e.g. `JSON.stringify([{key: "name", value: "Alice", enabled: true}])`. `enabled` defaults to `true`; optional `type` accepts `text` or `file`. An empty string clears the form. Invalid form content stops sending with an error.
 
 ```javascript
 // Variables

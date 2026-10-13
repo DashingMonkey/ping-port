@@ -36,6 +36,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const workspaces = ref<Workspace[]>([])
   const currentWorkspace = ref<Workspace | null>(null)
   const isLoading = ref(false)
+  const isSwitching = ref(false)
 
   const error = ref<string | null>(null)
 
@@ -58,8 +59,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   // Switch workspace
   const switchWorkspace = async (name: string) => {
+    if (isSwitching.value) return
+    isSwitching.value = true
     isLoading.value = true
     try {
+      // Persist the current workspace before changing the key used by tabs.
+      useTabsStore().persist()
       await invoke('switch_workspace', { name })
       currentWorkspace.value = workspaces.value.find(w => w.name === name) || {
         name,
@@ -76,6 +81,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       throw e
     } finally {
       isLoading.value = false
+      isSwitching.value = false
     }
   }
 
@@ -106,12 +112,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   // Rename a workspace
   const renameWorkspace = async (oldName: string, newName: string) => {
     await invoke('rename_workspace', { oldName, newName })
+    useTabsStore().renameWorkspaceStorage(oldName, newName)
     const ws = workspaces.value.find(w => w.name === oldName)
     if (ws) {
       ws.name = newName
       const pathParts = ws.path.replace(/\\/g, '/').split('/')
-      if (pathParts[pathParts.length - 1] === oldName) {
-        pathParts[pathParts.length - 1] = newName
+      if (pathParts[pathParts.length - 1] === `${oldName}.db`) {
+        pathParts[pathParts.length - 1] = `${newName}.db`
         ws.path = pathParts.join(ws.path.includes('\\') ? '\\' : '/')
       }
     }
@@ -131,6 +138,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     workspaces,
     currentWorkspace,
     isLoading,
+    isSwitching,
     error,
     lastWorkspaceName,
     scanWorkspaces,

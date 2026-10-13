@@ -59,6 +59,7 @@ const zh: typeof en = {
     saveFailed: '保存失败: {error}',
     noCollections: '暂无集合',
     preRequestError: '预请求脚本错误: {message}',
+    invalidFormBody: '{type} 请求体格式无效。请使用字段 JSON 数组：key/value 必须为字符串，enabled 可选且必须为布尔值，type 可选且只能为 text/file。请检查正文编辑器或预请求脚本。',
   },
   response: {
     body: '正文',

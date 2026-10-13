@@ -63,7 +63,7 @@ pub struct PmRequest {
 pub struct PmResponse {
     pub status: u16,
     #[serde(default)]
-    pub headers: HashMap<String, String>,
+    pub headers: HashMap<String, Vec<String>>,
     #[serde(default)]
     pub body: Option<String>,
     pub time: u64,

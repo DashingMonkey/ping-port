@@ -43,7 +43,7 @@ pub struct SendRequestResponse {
     pub error: Option<String>,
     pub status: Option<u16>,
     pub status_text: Option<String>,
-    pub headers: Option<HashMap<String, String>>,
+    pub headers: Option<HashMap<String, Vec<String>>>,
     pub body: Option<String>,
     pub time_ms: Option<u64>,
     pub size_bytes: Option<usize>,
@@ -56,9 +56,7 @@ pub async fn send_request(
 ) -> Result<SendRequestResponse, String> {
     let client = {
         let state = app_handle.state::<std::sync::Mutex<crate::AppState>>();
-        let app_state = state
-            .lock()
-            .map_err(|e| format!("Internal error: {}", e))?;
+        let app_state = state.lock().map_err(|e| format!("Internal error: {}", e))?;
         app_state.http_client.clone()
     };
 
@@ -70,7 +68,7 @@ pub async fn send_request(
         "bearer" => HttpAuth::Bearer {
             token: a.token.unwrap_or_default(),
         },
-        "apikey" => HttpAuth::ApiKey {
+        "api-key" | "apikey" => HttpAuth::ApiKey {
             key: a.key.unwrap_or_default(),
             value: a.value.unwrap_or_default(),
             in_header: a.in_header.unwrap_or(true),

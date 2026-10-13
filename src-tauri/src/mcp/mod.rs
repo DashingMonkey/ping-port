@@ -49,28 +49,38 @@ pub fn start(app: AppHandle) -> Result<(), String> {
 }
 
 fn write_config(app: &AppHandle, port: u16, token: &str) -> Result<(), String> {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
-    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create app data dir: {}", e))?;
+    let path = config_path(app)?;
+    if let Some(dir) = path.parent().filter(|dir| !dir.as_os_str().is_empty()) {
+        std::fs::create_dir_all(dir)
+            .map_err(|e| format!("Failed to create MCP config directory: {}", e))?;
+    }
     let cfg = json!({ "port": port, "token": token });
-    std::fs::write(dir.join("mcp.json"), cfg.to_string())
+    std::fs::write(path, cfg.to_string())
         .map_err(|e| format!("Failed to write MCP config: {}", e))?;
     Ok(())
+}
+
+fn config_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    if let Ok(path) = std::env::var("PINGPORT_MCP_CONFIG") {
+        return Ok(path.into());
+    }
+    app.path()
+        .app_data_dir()
+        .map(|dir| dir.join("mcp.json"))
+        .map_err(|e| format!("Failed to resolve app data dir: {}", e))
 }
 
 /// Remove the bridge connection file on app exit so the stdio bridge can't
 /// pick up a stale port/token from a previous run.
 pub fn cleanup_config(app: &AppHandle) {
-    let dir = match app.path().app_data_dir() {
-        Ok(dir) => dir,
+    let path = match config_path(app) {
+        Ok(path) => path,
         Err(e) => {
             log::warn!("Failed to resolve app data dir for MCP cleanup: {}", e);
             return;
         }
     };
-    if let Err(e) = std::fs::remove_file(dir.join("mcp.json")) {
+    if let Err(e) = std::fs::remove_file(path) {
         if e.kind() != std::io::ErrorKind::NotFound {
             log::warn!("Failed to remove MCP config: {}", e);
         }
@@ -128,8 +138,7 @@ async fn handle_mcp(
     }
 
     let handler = server.clone();
-    let result =
-        tokio::task::spawn_blocking(move || handler.handle_message(msg)).await;
+    let result = tokio::task::spawn_blocking(move || handler.handle_message(msg)).await;
 
     match result {
         Ok(Some(response)) => (StatusCode::OK, Json(response)).into_response(),
@@ -218,8 +227,8 @@ impl McpServer {
         }
         match tools::call_tool(&self.app, name, &args) {
             Ok(result) => {
-                let text = serde_json::to_string_pretty(&result)
-                    .unwrap_or_else(|_| "{}".to_string());
+                let text =
+                    serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".to_string());
                 Ok(json!({
                     "content": [ { "type": "text", "text": text } ]
                 }))

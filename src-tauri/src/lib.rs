@@ -41,6 +41,7 @@ pub fn run() {
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
             get_collections,
             pick_file,
@@ -86,7 +87,10 @@ pub fn run() {
 
             // Create database directory if it doesn't exist
             if let Err(e) = std::fs::create_dir_all(&exe_dir) {
-                let msg = format!("无法创建数据库目录 / Failed to create database directory: {}", e);
+                let msg = format!(
+                    "无法创建数据库目录 / Failed to create database directory: {}",
+                    e
+                );
                 log::error!("{}", msg);
                 rfd::MessageDialog::new()
                     .set_title("PingPort Error")
@@ -182,9 +186,8 @@ fn detect_webview2_registry() -> Option<String> {
     use winreg::RegKey;
 
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let key_paths = [
-        r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
-    ];
+    let key_paths =
+        [r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"];
 
     for key_path in &key_paths {
         if let Ok(key) = hklm.open_subkey_with_flags(key_path, KEY_READ) {
@@ -250,9 +253,7 @@ fn has_webview2_content(dir: &std::path::Path) -> bool {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                if path.join("msedgewebview2.exe").exists()
-                    || path.join("EBWebView").exists()
-                {
+                if path.join("msedgewebview2.exe").exists() || path.join("EBWebView").exists() {
                     return true;
                 }
             }
@@ -292,3 +293,17 @@ fn detect_webview2_loader() -> bool {
 
 #[cfg(not(target_os = "windows"))]
 fn check_webview2() {}
+
+#[cfg(test)]
+mod config_tests {
+    #[test]
+    fn window_state_config_matches_plugin_unit_config() {
+        // window-state 2.x returns TauriPlugin<R, ()>. Tauri deserializes
+        // this value at startup, so a JSON object compiles but cannot launch.
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let plugin_config = config["plugins"]["window-state"].clone();
+        serde_json::from_value::<()>(plugin_config)
+            .expect("Configure window-state through its Rust builder, not a JSON object");
+    }
+}

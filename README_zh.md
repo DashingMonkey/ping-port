@@ -77,9 +77,14 @@ ping-port/
 
 ## 构建
 
+需要 Node.js 22.15+（22.x）或 24+、Rust 及 Tauri 对应平台的构建依赖。Windows 的 `build.bat` 还使用 Windows PowerShell 关闭正在重新构建的程序。
+
 ```bash
 # 安装前端依赖
 npm install
+
+# 检查 Vue/TypeScript 类型并运行前端回归测试
+npm run check
 
 # 开发模式运行
 npm run tauri dev
@@ -152,6 +157,10 @@ Cursor / Claude Desktop / Trae 等使用 JSON 配置的客户端（按平台调�
 ## 脚本 API
 
 前后置脚本运行在沙箱化的 JavaScript 环境中，提供以下 API：
+
+每次发送都会重新读取当前环境变量。脚本修改的变量仅在本次发送的前后置脚本之间共享，不修改已保存的环境，也不带入下一次发送。禁用的请求头和查询参数不会传入脚本。
+
+对于 `form-data` 和 `x-www-form-urlencoded`，`pp.request.body` 必须是字段数组的 JSON 字符串，例如 `JSON.stringify([{key: "name", value: "Alice", enabled: true}])`。`enabled` 默认为 `true`，可选的 `type` 为 `text` 或 `file`。空字符串表示清空表单；无效格式会提示错误并停止发送。
 
 ```javascript
 // 变量

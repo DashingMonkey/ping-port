@@ -1,6 +1,6 @@
 use crate::scripting::isolation::ScriptIsolation;
 use crate::scripting::pm_api::{PmApi, TestResult};
-use rquickjs::{CaughtError, CatchResultExt, Context, Ctx, Function, Object, Value};
+use rquickjs::{CatchResultExt, CaughtError, Context, Ctx, Function, Object, Value};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::mpsc;
@@ -38,6 +38,7 @@ struct JsRequest {
     url: RefCell<String>,
     body: Option<String>,
     query_params: RefCell<std::collections::HashMap<String, String>>,
+    headers: HashMap<String, String>,
 }
 
 impl JsRequest {
@@ -46,12 +47,14 @@ impl JsRequest {
         url: String,
         body: Option<String>,
         query_params: std::collections::HashMap<String, String>,
+        headers: HashMap<String, String>,
     ) -> Self {
         Self {
             method,
             url: RefCell::new(url),
             body,
             query_params: RefCell::new(query_params),
+            headers,
         }
     }
 }
@@ -62,11 +65,16 @@ struct JsResponse {
     status: u16,
     body: Option<String>,
     time: u64,
-    headers: HashMap<String, String>,
+    headers: HashMap<String, Vec<String>>,
 }
 
 impl JsResponse {
-    fn new(status: u16, body: Option<String>, time: u64, headers: HashMap<String, String>) -> Self {
+    fn new(
+        status: u16,
+        body: Option<String>,
+        time: u64,
+        headers: HashMap<String, Vec<String>>,
+    ) -> Self {
         Self {
             status,
             body,
@@ -111,6 +119,7 @@ impl JsPmApi {
                 req.url.clone(),
                 req.body.clone(),
                 req.query_params.clone(),
+                req.headers.clone(),
             ));
         }
 
@@ -154,7 +163,9 @@ impl RuntimeManager {
 
         // Apply sandbox resource limits
         runtime.set_memory_limit(10 * 1024 * 1024); // 10 MB
-        runtime.set_max_stack_size(64 * 1024); // 64 KB
+                                                    // JS test callbacks re-enter QuickJS through Rust. Leave enough stack
+                                                    // for that bridge, while still bounding recursive user scripts.
+        runtime.set_max_stack_size(512 * 1024); // 512 KB
 
         let context = Context::full(&runtime)?;
         Ok(Self {
@@ -188,11 +199,25 @@ impl RuntimeManager {
             log::info!("PM object created successfully");
             log::info!("Evaluating script...");
             let scoped_script = format!("(function() {{ {} }})();", script);
-            let _: () = ctx.eval(scoped_script.as_bytes()).catch(&ctx).map_err(|e| {
-                let msg = format_caught_error(&e);
-                log::error!("Script eval error: {}", msg);
-                format!("Script error: {}", msg)
-            })?;
+            let _: () = ctx
+                .eval(scoped_script.as_bytes())
+                .catch(&ctx)
+                .map_err(|e| {
+                    let msg = format_caught_error(&e);
+                    log::error!("Script eval error: {}", msg);
+                    format!("Script error: {}", msg)
+                })?;
+            let pp: Object = ctx.globals().get("pp").map_err(|e| e.to_string())?;
+            let request: Object = pp.get("request").map_err(|e| e.to_string())?;
+            if let Some(req) = js_pm.request.borrow_mut().as_mut() {
+                req.method = request.get("method").map_err(|e| e.to_string())?;
+                req.body = Some(request.get("body").map_err(|e| e.to_string())?);
+                let headers: Object = request.get("headers").map_err(|e| e.to_string())?;
+                req.headers = headers
+                    .props::<String, String>()
+                    .collect::<Result<HashMap<_, _>, _>>()
+                    .map_err(|e| e.to_string())?;
+            }
             log::info!("Script evaluated successfully");
             Ok(js_pm)
         });
@@ -209,6 +234,7 @@ impl RuntimeManager {
                     req.body = Some(body.clone());
                 }
                 req.query_params = js_req.query_params.borrow().clone();
+                req.headers = js_req.headers.clone();
             }
         }
         pm_api.variables.data = js_pm.variables.data.borrow().clone();
@@ -249,6 +275,8 @@ impl RuntimeManager {
         });
 
         let js_pm = js_pm_result?;
+
+        pm_api.variables.data = js_pm.variables.data.borrow().clone();
 
         let results = js_pm
             .test_results
@@ -293,9 +321,7 @@ pub struct ScriptEngine {
     sender: mpsc::Sender<(ScriptCommand, mpsc::Sender<ScriptResult>)>,
 }
 
-fn script_thread(
-    rx: mpsc::Receiver<(ScriptCommand, mpsc::Sender<ScriptResult>)>,
-) {
+fn script_thread(rx: mpsc::Receiver<(ScriptCommand, mpsc::Sender<ScriptResult>)>) {
     let mut manager = match RuntimeManager::new() {
         Ok(m) => m,
         Err(e) => {
@@ -318,9 +344,7 @@ fn script_thread(
             ScriptCommand::PreRequest { script, pm_api } => {
                 manager.execute_pre_request(&script, pm_api)
             }
-            ScriptCommand::Test { script, pm_api } => {
-                manager.execute_test(&script, pm_api)
-            }
+            ScriptCommand::Test { script, pm_api } => manager.execute_test(&script, pm_api),
             ScriptCommand::Shutdown => break,
         };
         let _ = reply.send(ScriptResult(result));
@@ -363,8 +387,7 @@ impl ScriptEngine {
     }
 }
 
-static SCRIPT_ENGINE: LazyLock<ScriptEngine> =
-    LazyLock::new(|| ScriptEngine::new());
+static SCRIPT_ENGINE: LazyLock<ScriptEngine> = LazyLock::new(|| ScriptEngine::new());
 
 fn get_engine() -> &'static ScriptEngine {
     &SCRIPT_ENGINE
@@ -479,6 +502,13 @@ fn create_pm_object<'js>(ctx: &Ctx<'js>, pm: JsPmApi) -> anyhow::Result<JsPmApi>
             }),
         )?;
 
+        let headers_obj = Object::new(ctx.clone())?;
+        if let Some(ref req) = *pm.request.borrow() {
+            for (key, value) in &req.headers {
+                headers_obj.set(key, value.clone())?;
+            }
+        }
+        request_obj.set("headers", headers_obj)?;
         if let Some(ref req) = *pm.request.borrow() {
             request_obj.set("method", req.method.clone())?;
             request_obj.set("body", req.body.clone().unwrap_or_default())?;
@@ -502,7 +532,11 @@ fn create_pm_object<'js>(ctx: &Ctx<'js>, pm: JsPmApi) -> anyhow::Result<JsPmApi>
 
             let headers_obj = Object::new(ctx.clone())?;
             for (k, v) in &resp.headers {
-                headers_obj.set(k, v.clone())?;
+                if v.len() == 1 {
+                    headers_obj.set(k, v[0].clone())?;
+                } else {
+                    headers_obj.set(k, v.clone())?;
+                }
             }
             response_obj.set("headers", headers_obj)?;
 
@@ -537,22 +571,25 @@ fn create_pm_object<'js>(ctx: &Ctx<'js>, pm: JsPmApi) -> anyhow::Result<JsPmApi>
         let test_results = pm.test_results.clone();
         pp_obj.set(
             "test",
-            Function::new(ctx.clone(), move |name: String, fn_: Function<'js>| {
-                let start = Instant::now();
-                let (passed, error_msg) = match fn_.call::<_, ()>(()) {
-                    Ok(()) => (true, None),
-                    Err(e) => (false, Some(e.to_string())),
-                };
-                let duration = start.elapsed().as_millis() as u64;
-                if let Ok(mut results) = test_results.0.lock() {
-                    results.push(TestResult {
-                        name,
-                        passed,
-                        error: error_msg,
-                        duration,
-                    });
-                }
-            }),
+            Function::new(
+                ctx.clone(),
+                move |ctx: Ctx<'js>, name: String, fn_: Function<'js>| {
+                    let start = Instant::now();
+                    let (passed, error_msg) = match fn_.call::<_, ()>(()).catch(&ctx) {
+                        Ok(()) => (true, None),
+                        Err(e) => (false, Some(format_caught_error(&e))),
+                    };
+                    let duration = start.elapsed().as_millis() as u64;
+                    if let Ok(mut results) = test_results.0.lock() {
+                        results.push(TestResult {
+                            name,
+                            passed,
+                            error: error_msg,
+                            duration,
+                        });
+                    }
+                },
+            ),
         )?;
     }
 

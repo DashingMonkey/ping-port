@@ -57,6 +57,7 @@ const en = {
     saveFailed: 'Failed to save: {error}',
     noCollections: 'No collections',
     preRequestError: 'Pre-request script error: {message}',
+    invalidFormBody: 'Invalid {type} body. Use a JSON array of fields with string key/value, optional boolean enabled, and optional type text/file. Check the body editor or pre-request script.',
   },
   response: {
     body: 'Body',

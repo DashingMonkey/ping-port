@@ -8,6 +8,8 @@ interface PostmanHeader {
   key: string
   value: string
   disabled?: boolean
+  type?: 'text' | 'file'
+  src?: string
 }
 
 interface PostmanUrl {
@@ -19,7 +21,7 @@ interface PostmanUrl {
 }
 
 interface PostmanBody {
-  mode?: 'none' | 'raw' | 'formdata' | 'urlencoded'
+  mode?: 'raw' | 'formdata' | 'urlencoded'
   raw?: string
   formdata?: PostmanHeader[]
   urlencoded?: PostmanHeader[]
@@ -36,8 +38,8 @@ interface PostmanRequest {
 interface PostmanAuth {
   type?: string
   bearer?: { key: string; value: string }[]
-  basic?: { username: string; password: string }[]
-  apikey?: { key: string; value: string; in: string }[]
+  basic?: { key: string; value: string }[]
+  apikey?: { key: string; value: string }[]
 }
 
 interface PostmanItem {
@@ -45,6 +47,7 @@ interface PostmanItem {
   request?: PostmanRequest
   item?: PostmanItem[]
   description?: string
+  event?: { listen: string; script: { type?: string; exec: string[] | string } }[]
 }
 
 export interface PostmanCollection {
@@ -56,123 +59,63 @@ export interface PostmanCollection {
   item: PostmanItem[]
 }
 
-/**
- * Convert headers array to object for easier storage
- */
-function headersToObject(headers: KeyValuePair[]): Record<string, string> {
-  const obj: Record<string, string> = {}
-  for (const h of headers) {
-    if (h.enabled) {
-      obj[h.key] = h.value
-    }
-  }
-  return obj
+function splitUrl(raw: string): { base: string; query: KeyValuePair[] } {
+  const hashIndex = raw.indexOf('#');
+  const fragment = hashIndex < 0 ? '' : raw.slice(hashIndex);
+  const address = hashIndex < 0 ? raw : raw.slice(0, hashIndex);
+  const index = address.indexOf('?');
+  if (index < 0) return { base: raw, query: [] };
+  return {
+    base: address.slice(0, index) + fragment,
+    query: Array.from(new URLSearchParams(address.slice(index + 1)), ([key, value]) => ({ key, value, enabled: true })),
+  };
 }
 
-/**
- * Parse URL string into components
- */
-function parseUrl(urlStr: string): { host: string[]; path: string[]; query: KeyValuePair[] } {
-  try {
-    let host: string[] = []
-    let path: string[] = []
-    let query: KeyValuePair[] = []
-
-    // Handle protocol
-    const protocolMatch = urlStr.match(/^(\w+):\/\//)
-    if (protocolMatch) {
-      urlStr = urlStr.substring(protocolMatch[0].length)
-    }
-
-    // Split host and path
-    const pathIndex = urlStr.indexOf('/')
-    let hostPart: string
-    let pathPart: string
-    if (pathIndex !== -1) {
-      hostPart = urlStr.substring(0, pathIndex)
-      pathPart = urlStr.substring(pathIndex + 1)
-    } else {
-      hostPart = urlStr
-      pathPart = ''
-    }
-
-    // Split host into parts
-    host = hostPart.split('.').filter(Boolean)
-
-    // Handle query parameters
-    const queryIndex = pathPart.indexOf('?')
-    let pathWithoutQuery: string
-    if (queryIndex !== -1) {
-      pathWithoutQuery = pathPart.substring(0, queryIndex)
-      const queryStr = pathPart.substring(queryIndex + 1)
-      pathPart = pathWithoutQuery
-      query = queryStr.split('&').map(pair => {
-        const [key, ...valueParts] = pair.split('=')
-        return {
-          key: decodeURIComponent(key),
-          value: decodeURIComponent(valueParts.join('=')),
-          enabled: true,
-        }
-      })
-    }
-
-    // Split path into parts
-    path = pathPart.split('/').filter(Boolean)
-
-    return { host, path, query }
-  } catch {
-    return { host: [], path: [], query: [] }
-  }
+function appendQuery(base: string, query: KeyValuePair[]): string {
+  const hashIndex = base.indexOf('#');
+  const fragment = hashIndex < 0 ? '' : base.slice(hashIndex);
+  const address = hashIndex < 0 ? base : base.slice(0, hashIndex);
+  const encoded = query.filter(q => q.enabled && q.key).map(q =>
+    `${encodeURIComponent(q.key)}=${encodeURIComponent(q.value)}`
+  ).join('&').replace(/%7B/gi, '{').replace(/%7D/gi, '}');
+  return address + (encoded ? '?' + encoded : '') + fragment;
 }
 
 /**
  * Convert internal RequestState to Postman request format
  */
 function requestStateToPostman(state: RequestState): PostmanRequest {
-  const headers = headersToObject(state.headers)
-  const headerArray: PostmanHeader[] = Object.entries(headers).map(([key, value]) => ({
-    key,
-    value,
-    disabled: false,
+  const headerArray: PostmanHeader[] = state.headers.filter(h => h.key).map(h => ({
+    key: h.key, value: h.value, disabled: !h.enabled,
   }))
-
-  // Parse URL
-  let postmanUrl: PostmanUrl
-  if (state.url) {
-    const parsed = parseUrl(state.url)
-    const protocolMatch = state.url.match(/^(\w+):\/\//)
-    const protocol = protocolMatch ? protocolMatch[1] : (state.url.startsWith('https') ? 'https' : 'http')
-    postmanUrl = {
-      raw: state.url,
-      protocol,
-      host: parsed.host,
-      path: parsed.path,
-      query: parsed.query.map(q => ({ key: q.key, value: q.value })),
-    }
-  } else {
-    postmanUrl = { raw: '' }
+  const parsed = splitUrl(state.url)
+  const query = [...parsed.query, ...state.params.filter(p => p.key)]
+  const postmanUrl: PostmanUrl = {
+    raw: appendQuery(parsed.base, query),
+    query: query.map(q => ({ key: q.key, value: q.value, disabled: !q.enabled })),
   }
 
   // Convert body
   let postmanBody: PostmanBody | undefined
-  if (state.body.type === 'json' && state.body.content) {
+  if (state.body.type === 'json') {
     postmanBody = { mode: 'raw', raw: state.body.content }
   } else if (state.body.type === 'form-data' || state.body.type === 'x-www-form-urlencoded') {
     const formData = state.body.content ? JSON.parse(state.body.content) : []
+    const mode = state.body.type === 'form-data' ? 'formdata' : 'urlencoded'
     postmanBody = {
-      mode: state.body.type === 'form-data' ? 'formdata' : 'urlencoded',
-      formdata: formData.map((item: KeyValuePair) => ({
+      mode,
+      [mode]: formData.map((item: KeyValuePair) => ({
         key: item.key,
-        value: item.value,
+        ...(mode === 'formdata' && item.type === 'file'
+          ? { type: 'file', src: item.value }
+          : { value: item.value, ...(mode === 'formdata' ? { type: 'text' } : {}) }),
         disabled: !item.enabled,
       })),
     }
-  } else {
-    postmanBody = { mode: 'none' }
   }
 
   // Convert auth
-  let postmanAuth: PostmanAuth | undefined
+  let postmanAuth: PostmanAuth = { type: 'noauth' }
   if (state.auth.type === 'bearer' && state.auth.bearer) {
     postmanAuth = {
       type: 'bearer',
@@ -181,12 +124,12 @@ function requestStateToPostman(state: RequestState): PostmanRequest {
   } else if (state.auth.type === 'basic' && state.auth.basic) {
     postmanAuth = {
       type: 'basic',
-      basic: [{ username: state.auth.basic.username, password: state.auth.basic.password }],
+      basic: [{ key: 'username', value: state.auth.basic.username }, { key: 'password', value: state.auth.basic.password }],
     }
   } else if (state.auth.type === 'api-key' && state.auth.apiKey) {
     postmanAuth = {
       type: 'apikey',
-      apikey: [{ key: state.auth.apiKey.key, value: state.auth.apiKey.value, in: state.auth.apiKey.in }],
+      apikey: [{ key: 'key', value: state.auth.apiKey.key }, { key: 'value', value: state.auth.apiKey.value }, { key: 'in', value: state.auth.apiKey.in }],
     }
   }
 
@@ -223,25 +166,23 @@ function postmanToRequestState(req: PostmanRequest): Partial<RequestState> {
     }))
   }
 
-  // Parse URL query params
-  if (typeof req.url !== 'string' && req.url?.query) {
-    state.params = req.url.query.map(q => ({
-      key: q.key,
-      value: q.value,
-      enabled: !q.disabled,
-    }))
-  }
+  const parsed = splitUrl(state.url || '')
+  state.url = parsed.base
+  state.params = typeof req.url !== 'string' && req.url?.query
+    ? req.url.query.map(q => ({ key: q.key, value: q.value ?? '', enabled: !q.disabled }))
+    : parsed.query
 
   // Parse body
   if (req.body) {
-    if (req.body.mode === 'raw' && req.body.raw) {
+    if (req.body.mode === 'raw' && req.body.raw !== undefined) {
       state.body = { type: 'json', content: req.body.raw }
     } else if (req.body.mode === 'formdata' && req.body.formdata) {
       state.body = {
         type: 'form-data',
         content: JSON.stringify(req.body.formdata.map(h => ({
           key: h.key,
-          value: h.value,
+          value: h.type === 'file' ? h.src || '' : h.value,
+          type: h.type || 'text',
           enabled: !h.disabled,
         }))),
       }
@@ -250,7 +191,8 @@ function postmanToRequestState(req: PostmanRequest): Partial<RequestState> {
         type: 'x-www-form-urlencoded',
         content: JSON.stringify(req.body.urlencoded.map(h => ({
           key: h.key,
-          value: h.value,
+          value: h.type === 'file' ? h.src || '' : h.value,
+          type: h.type || 'text',
           enabled: !h.disabled,
         }))),
       }
@@ -262,19 +204,19 @@ function postmanToRequestState(req: PostmanRequest): Partial<RequestState> {
   // Parse auth
   if (req.auth) {
     if (req.auth.type === 'bearer' && req.auth.bearer?.[0]) {
-      state.auth = { type: 'bearer', bearer: { token: req.auth.bearer[0].value } }
+      state.auth = { type: 'bearer', bearer: { token: req.auth.bearer.find(a => a.key === 'token')?.value || '' } }
     } else if (req.auth.type === 'basic' && req.auth.basic?.[0]) {
       state.auth = {
         type: 'basic',
-        basic: { username: req.auth.basic[0].username, password: req.auth.basic[0].password },
+        basic: { username: req.auth.basic.find(a => a.key === 'username')?.value || '', password: req.auth.basic.find(a => a.key === 'password')?.value || '' },
       }
     } else if (req.auth.type === 'apikey' && req.auth.apikey?.[0]) {
       state.auth = {
         type: 'api-key',
         apiKey: {
-          key: req.auth.apikey[0].key,
-          value: req.auth.apikey[0].value,
-          in: req.auth.apikey[0].in as 'header' | 'query',
+          key: req.auth.apikey.find(a => a.key === 'key')?.value || '',
+          value: req.auth.apikey.find(a => a.key === 'value')?.value || '',
+          in: req.auth.apikey.find(a => a.key === 'in')?.value === 'query' ? 'query' : 'header',
         },
       }
     }
@@ -320,25 +262,31 @@ function buildCollectionTree(
   // Add requests to their collections
   for (const req of requests) {
     const collection = collectionMap.get(req.collectionId)
-    if (collection) {
-      const requestState: RequestState = {
-        method: req.method as RequestState['method'],
-        url: req.url,
-        params: req.params ? JSON.parse(req.params) : [],
-        headers: req.headers ? JSON.parse(req.headers) : [],
-        body: req.body ? JSON.parse(req.body) : { type: 'none', content: '' },
-        auth: req.auth ? JSON.parse(req.auth) : { type: 'none' },
-        preRequestScript: req.preRequestScript || '',
-        testScript: req.testScript || '',
-      }
+    const requestState: RequestState = {
+      method: req.method as RequestState['method'],
+      url: req.url,
+      params: req.params ? JSON.parse(req.params) : [],
+      headers: req.headers ? JSON.parse(req.headers) : [],
+      body: req.body ? JSON.parse(req.body) : { type: 'none', content: '' },
+      auth: req.auth ? JSON.parse(req.auth) : { type: 'none' },
+      preRequestScript: req.preRequestScript || '',
+      testScript: req.testScript || '',
+    }
 
-      const postmanReq = requestStateToPostman(requestState)
-      const requestItem: PostmanItem = {
-        name: req.name,
-        request: postmanReq,
-      }
+    const postmanReq = requestStateToPostman(requestState)
+    const requestItem: PostmanItem = {
+      name: req.name,
+      request: postmanReq,
+      event: [
+        { listen: 'prerequest', script: { type: 'text/javascript', exec: requestState.preRequestScript.split('\n') } },
+        { listen: 'test', script: { type: 'text/javascript', exec: requestState.testScript.split('\n') } },
+      ].filter(event => event.script.exec.some(line => line.length > 0)),
+    }
+    if (collection) {
       if (!collection.item) collection.item = []
       collection.item.push(requestItem)
+    } else {
+      rootItems.push(requestItem)
     }
   }
 
@@ -397,6 +345,11 @@ function parsePostmanItems(
     if (item.request) {
       // This is a request
       const requestState = postmanToRequestState(item.request)
+      for (const event of item.event || []) {
+        const script = Array.isArray(event.script.exec) ? event.script.exec.join('\n') : event.script.exec
+        if (event.listen === 'prerequest') requestState.preRequestScript = script
+        if (event.listen === 'test') requestState.testScript = script
+      }
       const request: ParsedRequest = {
         id: crypto.randomUUID(),
         collectionId,
@@ -413,7 +366,7 @@ function parsePostmanItems(
       requests.push(request)
     }
 
-    if (item.item && item.item.length > 0) {
+    if (item.item) {
       // This is a folder/collection
       const folderCollection: ParsedCollection = {
         id: crypto.randomUUID(),
@@ -433,6 +386,9 @@ function parsePostmanItems(
 export function fromPostmanCollection(
   data: PostmanCollection
 ): { collections: Collection[]; requests: Request[] } {
+  if (!data || !data.info || typeof data.info.name !== 'string' || !Array.isArray(data.item)) {
+    throw new Error('Expected a Postman Collection with info.name and an item array')
+  }
   const parsedCollections: ParsedCollection[] = []
   const parsedRequests: ParsedRequest[] = []
 

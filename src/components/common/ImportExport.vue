@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useCollectionsStore } from '../../stores/collections'
 import { useRequestsStore } from '../../stores/requests'
@@ -8,7 +8,7 @@ import { toast } from '../../composables/useToast'
 const { t } = useI18n()
 import { toPostmanCollection, fromPostmanCollection, exportToJson, importFromJson, type PostmanCollection } from '../../lib/import-export'
 
-defineProps<{
+const props = defineProps<{
   mode: 'import' | 'export'
 }>()
 
@@ -33,6 +33,10 @@ const handleExport = () => {
   exportText.value = exportToJson(postmanData)
 }
 
+onMounted(() => {
+  if (props.mode === 'export') handleExport()
+})
+
 const handleImport = async () => {
   importError.value = ''
   importing.value = true
@@ -56,6 +60,12 @@ const handleImport = async () => {
         name: req.name,
         method: req.method,
         url: req.url,
+        params: req.params ?? undefined,
+        headers: req.headers ?? undefined,
+        body: req.body ?? undefined,
+        auth: req.auth ?? undefined,
+        preRequestScript: req.preRequestScript ?? undefined,
+        testScript: req.testScript ?? undefined,
         collectionId: req.collectionId ? (collectionIdMap.get(req.collectionId) || '') : '',
       })
     }

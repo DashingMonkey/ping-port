@@ -28,7 +28,7 @@ pub struct KeyValuePair {
     pub key: String,
     pub value: String,
     pub enabled: bool,
-    #[serde(default)]
+    #[serde(default, rename = "type", alias = "pair_type")]
     pub pair_type: Option<String>, // "text" or "file"
 }
 
@@ -54,7 +54,7 @@ pub struct HttpRequest {
 pub struct HttpResponse {
     pub status: u16,
     pub status_text: String,
-    pub headers: HashMap<String, String>,
+    pub headers: HashMap<String, Vec<String>>,
     pub body: String,
     pub time_ms: u64,
     pub size_bytes: usize,
@@ -96,6 +96,14 @@ impl HttpClient {
         {
             let mut query_pairs = url.query_pairs_mut();
             for (key, value) in &request.query_params {
+                query_pairs.append_pair(key, value);
+            }
+            if let Some(HttpAuth::ApiKey {
+                key,
+                value,
+                in_header: false,
+            }) = &request.auth
+            {
                 query_pairs.append_pair(key, value);
             }
         }
@@ -217,10 +225,13 @@ impl HttpClient {
             .unwrap_or("Unknown")
             .to_string();
 
-        let mut response_headers = HashMap::new();
+        let mut response_headers: HashMap<String, Vec<String>> = HashMap::new();
         for (key, value) in response.headers() {
             if let Ok(v) = value.to_str() {
-                response_headers.insert(key.to_string(), v.to_string());
+                response_headers
+                    .entry(key.to_string())
+                    .or_default()
+                    .push(v.to_string());
             }
         }
 
@@ -246,5 +257,93 @@ impl HttpClient {
 impl Default for HttpClient {
     fn default() -> Self {
         Self::new().expect("Failed to create default HTTP client")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{body::Bytes, http::Uri, response::IntoResponse, routing::any, Json, Router};
+
+    async fn echo(uri: Uri, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
+        let mut response = Json(serde_json::json!({
+            "query": uri.query().unwrap_or(""),
+            "api_key": headers.get("x-api-key").and_then(|v| v.to_str().ok()),
+            "content_type": headers.get("content-type").and_then(|v| v.to_str().ok()),
+            "body": String::from_utf8_lossy(&body),
+        }))
+        .into_response();
+        response.headers_mut().append(
+            "set-cookie",
+            HeaderValue::from_static("a=1; Expires=Wed, 21 Oct 2030 07:28:00 GMT"),
+        );
+        response
+            .headers_mut()
+            .append("set-cookie", HeaderValue::from_static("b=2; Path=/"));
+        response
+    }
+
+    #[tokio::test]
+    async fn sends_api_keys_and_file_bytes_and_preserves_duplicate_headers() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, Router::new().route("/", any(echo)))
+                .await
+                .unwrap();
+        });
+        let client = HttpClient {
+            client: Client::builder().no_proxy().build().unwrap(),
+        };
+        let mut request = HttpRequest {
+            method: "POST".into(),
+            url: format!("http://{}/?existing=yes", address),
+            headers: HashMap::new(),
+            query_params: HashMap::new(),
+            body: Body::None,
+            auth: Some(HttpAuth::ApiKey {
+                key: "token".into(),
+                value: "a&b = c".into(),
+                in_header: false,
+            }),
+        };
+        let response = client.send(request.clone()).await.unwrap();
+        assert_eq!(response.headers["set-cookie"].len(), 2);
+        let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
+        let url = reqwest::Url::parse(&format!(
+            "http://localhost/?{}",
+            body["query"].as_str().unwrap()
+        ))
+        .unwrap();
+        let params: HashMap<_, _> = url.query_pairs().into_owned().collect();
+        assert_eq!(params["token"], "a&b = c");
+        assert_eq!(params["existing"], "yes");
+
+        let file = std::env::current_dir()
+            .unwrap()
+            .join("target")
+            .join(format!("upload-{}.txt", uuid::Uuid::new_v4()));
+        std::fs::write(&file, "actual-file-bytes").unwrap();
+        let field: KeyValuePair = serde_json::from_value(serde_json::json!({
+            "key": "attachment", "value": file.to_str().unwrap(), "enabled": true, "type": "file"
+        }))
+        .unwrap();
+        request.body = Body::FormData(vec![field]);
+        request.auth = Some(HttpAuth::ApiKey {
+            key: "x-api-key".into(),
+            value: "header-secret".into(),
+            in_header: true,
+        });
+        let response = client.send(request).await.unwrap();
+        let body: serde_json::Value = serde_json::from_str(&response.body).unwrap();
+        assert_eq!(body["api_key"], "header-secret");
+        assert!(body["content_type"]
+            .as_str()
+            .unwrap()
+            .contains("multipart/form-data; boundary="));
+        assert!(body["body"].as_str().unwrap().contains("actual-file-bytes"));
+        assert!(body["body"].as_str().unwrap().contains("filename="));
+        std::fs::remove_file(file).unwrap();
+        server.abort();
     }
 }

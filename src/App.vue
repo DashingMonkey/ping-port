@@ -50,17 +50,20 @@ async function initializeApp() {
     })
 
     // Set current workspace and workspaces list
-    workspaceStore.currentWorkspace = {
-      name: result.current_workspace,
-      path: '',
-      isTemporary: result.current_workspace.startsWith('temp-')
-    }
     workspaceStore.workspaces = result.workspaces.map(w => ({
       name: w.name,
       path: w.path,
       isTemporary: w.is_temporary,
     }))
+    workspaceStore.currentWorkspace = workspaceStore.workspaces.find(
+      w => w.name === result.current_workspace
+    ) || {
+      name: result.current_workspace,
+      path: '',
+      isTemporary: result.current_workspace.startsWith('temp-')
+    }
     localStorage.setItem('pingport-last-workspace', result.current_workspace)
+    workspaceStore.lastWorkspaceName = result.current_workspace
 
     // Only scan if workspaces is empty (first run created default.db)
     if (result.workspaces.length === 0) {
@@ -232,7 +235,7 @@ function parseJson<T>(value: string | null, fallback: T): T {
         </p>
       </div>
     </div>
-    <div v-else-if="isInitializing" class="h-full flex items-center justify-center">
+    <div v-else-if="isInitializing || workspaceStore.isSwitching" class="h-full flex items-center justify-center">
       <EmptyState
         :title="t('app.loading')"
         :message="t('app.loadingInit')"
@@ -240,7 +243,7 @@ function parseJson<T>(value: string | null, fallback: T): T {
     </div>
     <div v-else-if="tabsStore.activeTab && initialState" class="h-full">
       <RequestPanel
-        :key="`${tabsStore.activeTab.id}-${externalRequestVersion}`"
+        :key="`${workspaceStore.currentWorkspace?.name}-${tabsStore.activeTab.id}-${externalRequestVersion}`"
         :initial-state="initialState"
         :initial-title="initialTitle"
         :request-id="requestId"

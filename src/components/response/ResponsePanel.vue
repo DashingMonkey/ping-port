@@ -12,7 +12,7 @@ const { t } = useI18n()
 export interface HttpResponse {
   status: number
   status_text: string
-  headers: Record<string, string>
+  headers: Record<string, string[]>
   body: string
   time_ms: number
   size_bytes: number
@@ -31,13 +31,11 @@ const activeTab = ref<TabType>('body')
 
 const cookies = computed<Record<string, string>>(() => {
   if (!props.response) return {}
-  const setCookieHeader = props.response.headers['set-cookie'] || props.response.headers['Set-Cookie'] || ''
-  if (!setCookieHeader) return {}
+  const setCookieHeader = props.response.headers['set-cookie'] || props.response.headers['Set-Cookie'] || []
+  if (!setCookieHeader.length) return {}
 
   const result: Record<string, string> = {}
-  // Split on ", " followed by an attribute (expires, path, domain, etc.) not within the value
-  const cookieParts = setCookieHeader.split(new RegExp(', (?=(?:expires|path|domain|secure|httponly|samesite))', 'i'))
-  for (const part of cookieParts) {
+  for (const part of setCookieHeader) {
     const [nameValue] = part.split(';')
     const eqIndex = nameValue.indexOf('=')
     if (eqIndex > 0) {

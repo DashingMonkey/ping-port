@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { highlightVariables } from '../../lib/highlight-variables'
 
 const { t } = useI18n()
 const props = withDefaults(defineProps<{
@@ -28,29 +29,9 @@ let themeObserver: MutationObserver | null = null
 
 defineExpose({ textareaRef, containerRef })
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-}
-
-function highlightText(text: string): string {
-  const escaped = escapeHtml(text)
-  return escaped.replace(
-    /\{\{([^}]+)\}\}/g,
-    (_match, varName: string) => {
-      const trimmed = varName.trim()
-      const found = trimmed.length > 0 && props.variables[trimmed] !== undefined
-      const cls = found ? 'var-found' : 'var-not-found'
-      return `{{<span class="${cls}" data-varname="${escapeHtml(trimmed)}">${escapeHtml(trimmed)}</span>}}`
-    },
-  )
-}
-
 const highlightedHtml = computed(() => {
   if (!props.modelValue) return ''
-  return highlightText(props.modelValue)
+  return highlightVariables(props.modelValue, props.variables)
 })
 
 function handleInput(e: Event) {
@@ -163,7 +144,7 @@ onUnmounted(() => {
       @mouseout="onHighlightMouseOut"
       @click="onHighlightClick"
     >
-      <!-- SAFETY: highlightedHtml is built by highlightText() which calls escapeHtml() on user text before injecting any HTML -->
+      <!-- SAFETY: highlightedHtml is built by highlightVariables() which escapes all user text and attributes -->
       <span v-if="highlightedHtml" v-html="highlightedHtml"></span>
     </div>
     <Teleport to="body">

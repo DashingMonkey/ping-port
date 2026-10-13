@@ -8,199 +8,86 @@ struct ExecuteScriptInput {
     script_type: String,
     script: String,
     #[serde(default)]
-    request: Option<serde_json::Value>,
+    request: Option<PmRequest>,
     #[serde(default)]
-    response: Option<serde_json::Value>,
+    response: Option<PmResponse>,
     #[serde(default)]
-    variables: serde_json::Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RequestData {
-    pub method: String,
-    pub url: String,
-    #[serde(default)]
-    pub headers: Vec<HeaderItem>,
-    #[serde(default)]
-    pub body: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HeaderItem {
-    pub key: String,
-    pub value: String,
+    variables: HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct ExecuteScriptOutput {
-    #[serde(default)]
     pub variables: HashMap<String, String>,
-    #[serde(default)]
     pub test_results: Vec<TestResult>,
-    #[serde(default)]
     pub console_logs: Vec<String>,
-    pub modified_request: Option<RequestData>,
+    pub modified_request: Option<PmRequest>,
 }
 
 #[tauri::command]
 pub async fn execute_script(input: String) -> Result<String, String> {
-    log::info!("Executing script, {} bytes", input.len());
-
-    // Parse JSON input manually
     let input: ExecuteScriptInput =
         serde_json::from_str(&input).map_err(|e| format!("Failed to parse input JSON: {}", e))?;
-
-    // Parse request from JSON value
-    let request = if let Some(req_val) = &input.request {
-        match req_val {
-            serde_json::Value::Object(map) => {
-                let method = map
-                    .get("method")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("GET")
-                    .to_string();
-                let url = map
-                    .get("url")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let body = map.get("body").and_then(|v| v.as_str()).map(String::from);
-
-                // Parse headers
-                let mut headers = HashMap::new();
-                if let Some(headers_val) = map.get("headers") {
-                    if let Some(arr) = headers_val.as_array() {
-                        for item in arr {
-                            if let Some(obj) = item.as_object() {
-                                if let (Some(k), Some(v)) = (obj.get("key"), obj.get("value")) {
-                                    if let (Some(key), Some(value)) = (k.as_str(), v.as_str()) {
-                                        headers.insert(key.to_string(), value.to_string());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Parse query_params
-                let mut query_params = HashMap::new();
-                if let Some(params_val) = map.get("params") {
-                    if let Some(arr) = params_val.as_array() {
-                        for item in arr {
-                            if let Some(obj) = item.as_object() {
-                                if let (Some(k), Some(v)) = (obj.get("key"), obj.get("value")) {
-                                    if let (Some(key), Some(value)) = (k.as_str(), v.as_str()) {
-                                        query_params.insert(key.to_string(), value.to_string());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Some(PmRequest {
-                    method,
-                    url,
-                    headers,
-                    body,
-                    query_params,
-                })
-            }
-            _ => None,
-        }
-    } else {
-        None
+    let pm_api = PmApi {
+        variables: PmVariables {
+            data: input.variables,
+        },
+        request: input.request,
+        response: input.response,
+        ..Default::default()
     };
-
-    // Parse response from JSON value
-    let response = if let Some(resp_val) = &input.response {
-        match resp_val {
-            serde_json::Value::Object(map) => {
-                let status = map.get("status").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
-                let time = map.get("time").and_then(|v| v.as_u64()).unwrap_or(0);
-                let body = map.get("body").and_then(|v| v.as_str()).map(String::from);
-
-                // Parse headers
-                let mut headers = HashMap::new();
-                if let Some(headers_val) = map.get("headers") {
-                    if let Some(arr) = headers_val.as_array() {
-                        for item in arr {
-                            if let Some(obj) = item.as_object() {
-                                if let (Some(k), Some(v)) = (obj.get("key"), obj.get("value")) {
-                                    if let (Some(key), Some(value)) = (k.as_str(), v.as_str()) {
-                                        headers.insert(key.to_string(), value.to_string());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Some(PmResponse {
-                    status,
-                    headers,
-                    body,
-                    time,
-                })
-            }
-            _ => None,
-        }
-    } else {
-        None
-    };
-
-    let mut pm_api = PmApi {
-        variables: PmVariables::new(),
-        request,
-        response,
-        test_results: Vec::new(),
-        console_logs: Vec::new(),
-    };
-
-    // Set initial variables from JSON value
-    if let serde_json::Value::Object(map) = &input.variables {
-        for (key, value) in map {
-            if let serde_json::Value::String(v) = value {
-                pm_api.variables.set(key.clone(), v.clone());
-            }
-        }
-    }
-
-    let result = match input.script_type.as_str() {
+    // Script execution waits on a dedicated JS thread; keep that wait off the
+    // async runtime so a slow script cannot block unrelated commands.
+    let result = tauri::async_runtime::spawn_blocking(move || match input.script_type.as_str() {
         "pre_request" => ScriptEngine::execute_pre_request(&input.script, pm_api),
         "test" => ScriptEngine::execute_test(&input.script, pm_api),
-        _ => {
-            return Err(format!("Unknown script type: {}", input.script_type));
-        }
+        _ => Err(format!("Unknown script type: {}", input.script_type)),
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    let output = ExecuteScriptOutput {
+        variables: result.variables.data,
+        test_results: result.test_results,
+        console_logs: result.console_logs,
+        modified_request: result.request,
     };
+    serde_json::to_string(&output).map_err(|e| format!("Failed to serialize output: {}", e))
+}
 
-    match result {
-        Ok(pm_api) => {
-            let variables = pm_api.variables.data;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
 
-            let modified_request = pm_api.request.map(|r| RequestData {
-                method: r.method,
-                url: r.url,
-                headers: r
-                    .headers
-                    .into_iter()
-                    .map(|(k, v)| HeaderItem { key: k, value: v })
-                    .collect(),
-                body: r.body,
-            });
+    #[tokio::test]
+    async fn pre_request_round_trips_body_headers_params_and_variables() {
+        let result = execute_script(json!({
+            "script_type": "pre_request",
+            "script": "if (pp.request.body !== 'original') throw new Error('body lost'); pp.request.method = 'PUT'; pp.request.body = ''; pp.request.headers['X-Test'] = 'new'; delete pp.request.headers['X-Old']; pp.request.addQueryParam('added', 'yes'); pp.request.removeQueryParam('old'); pp.request.setUrl('http://localhost/{{token}}'); pp.variables.set('token', 'new-token');",
+            "request": { "method": "POST", "url": "http://localhost", "body": "original", "headers": { "X-Old": "old" }, "query_params": { "old": "old" } },
+            "variables": { "token": "old-token" }
+        }).to_string()).await.unwrap();
+        let result: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(result["variables"]["token"], "new-token");
+        let request = &result["modified_request"];
+        assert_eq!(request["method"], "PUT");
+        assert_eq!(request["body"], "");
+        assert_eq!(request["url"], "http://localhost/{{token}}");
+        assert_eq!(request["headers"], json!({ "X-Test": "new" }));
+        assert_eq!(request["query_params"], json!({ "added": "yes" }));
+    }
 
-            let output = ExecuteScriptOutput {
-                variables,
-                test_results: pm_api.test_results,
-                console_logs: pm_api.console_logs,
-                modified_request,
-            };
-
-            serde_json::to_string(&output).map_err(|e| format!("Failed to serialize output: {}", e))
-        }
-        Err(e) => {
-            log::error!("Script execution error: {}", e);
-            Err(e.to_string())
-        }
+    #[tokio::test]
+    async fn tests_receive_response_headers_and_return_variable_changes() {
+        let result = execute_script(json!({
+            "script_type": "test",
+            "script": "if (pp.response.headers['content-type'] !== 'application/json') throw new Error('header lost'); if (pp.response.headers['set-cookie'].length !== 2) throw new Error('cookies lost'); if (pp.request.getQueryParam('page') !== '2') throw new Error('params lost'); pp.variables.set('next', 'ready'); pp.variables.unset('old'); pp.test('status', () => pp.expect(pp.response.status).toEqual(200));",
+            "request": { "method": "GET", "url": "http://localhost", "query_params": { "page": "2" } },
+            "response": { "status": 200, "time": 5, "body": "{}", "headers": { "content-type": ["application/json"], "set-cookie": ["a=1", "b=2"] } },
+            "variables": { "old": "gone" }
+        }).to_string()).await.unwrap();
+        let result: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(result["variables"], json!({ "next": "ready" }));
+        assert_eq!(result["test_results"][0]["passed"], true, "{}", result);
     }
 }

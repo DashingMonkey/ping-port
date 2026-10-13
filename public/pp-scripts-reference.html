@@ -225,7 +225,7 @@
       <span class="badge badge-blue" data-i18n="test">Test</span>
     </div>
     <p class="api-group-desc" data-i18n="variables_desc">
-      A key-value store shared between Pre-request and Test scripts. Values persist across both scripts within the same request.
+      A key-value store shared between Pre-request and Test scripts within one send. Each send starts from the current environment; script changes do not persist to later sends or the saved environment.
     </p>
     <table class="method-table">
       <tr><td>get(key)</td>         <td data-i18n="variables_get">Returns the value for <code>key</code>, or <code>undefined</code> if not set</td></tr>
@@ -388,11 +388,11 @@
           pre_request_write: 'Pre-request (write)',
           test_read: 'Test (read)',
           test_only: 'Test only',
-          variables_desc: 'A key-value store shared between Pre-request and Test scripts. Values persist across both scripts within the same request.',
+          variables_desc: 'A key-value store shared between Pre-request and Test scripts within one send. Each send starts from the current environment; script changes do not persist to later sends or the saved environment.',
           variables_get: 'Returns the value for <code>key</code>, or <code>undefined</code> if not set',
           variables_set: 'Stores a value under <code>key</code>',
           variables_unset: 'Removes <code>key</code> and its value',
-          request_desc: 'Read and modify the outgoing HTTP request. In Test scripts the request has already been sent, so methods like <code>setUrl</code> have no effect there.',
+          request_desc: 'Read and modify the outgoing HTTP request. Disabled headers/query rows are omitted. For form bodies, <code>pp.request.body</code> must be a JSON string of field objects with string key/value, optional boolean enabled (default true), and optional type (text/file). An empty string clears the form; invalid content stops sending. In Test scripts the request has already been sent, so changes have no effect there.',
           request_getUrl: 'Returns the full URL string',
           request_setUrl: 'Replaces the entire URL',
           request_addQueryParam: 'Appends a query parameter',
@@ -438,11 +438,11 @@
           pre_request_write: '预请求 (写入)',
           test_read: '测试 (读取)',
           test_only: '仅测试',
-          variables_desc: '预请求和测试脚本之间共享的键值存储。在同一请求中，两个脚本之间的值会持久保留。',
+          variables_desc: '本次发送的预请求和测试脚本之间共享的键值存储。每次发送重新读取当前环境；脚本修改不会带入下一次发送，也不会修改已保存的环境。',
           variables_get: '返回 <code>key</code> 对应的值，未设置时返回 <code>undefined</code>',
           variables_set: '将值存储在 <code>key</code> 下',
           variables_unset: '移除 <code>key</code> 及其值',
-          request_desc: '读取和修改待发送的 HTTP 请求。在测试脚本中请求已发送，因此 <code>setUrl</code> 等方法不会生效。',
+          request_desc: '读取和修改待发送的 HTTP 请求，不包含禁用的请求头和查询参数。对于表单正文，<code>pp.request.body</code> 必须是字段数组的 JSON 字符串：key/value 为字符串，enabled 可选且为布尔值（默认 true），type 可选且为 text/file。空字符串清空表单，无效格式会停止发送。测试脚本中请求已发送，因此修改不会影响该请求。',
           request_getUrl: '返回完整的 URL 字符串',
           request_setUrl: '替换整个 URL',
           request_addQueryParam: '追加一个查询参数',

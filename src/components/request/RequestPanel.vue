@@ -32,7 +32,7 @@ interface SendRequestResponse {
   error: string | null
   status: number | null
   status_text: string | null
-  headers: Record<string, string> | null
+  headers: Record<string, string[]> | null
   body: string | null
   time_ms: number | null
   size_bytes: number | null
@@ -56,7 +56,7 @@ const defaultState: RequestState = {
 };
 
 const requestState = reactive<RequestState>(
-  props.initialState ?? { ...defaultState },
+  JSON.parse(JSON.stringify(props.initialState ?? defaultState)),
 );
 
 const { t } = useI18n()
@@ -65,6 +65,7 @@ const collectionsStore = useCollectionsStore();
 const environmentsStore = useEnvironmentsStore();
 const tabsStore = useTabsStore();
 const requestsStore = useRequestsStore();
+const mountedTabId = tabsStore.activeTabId;
 
 const response = ref<HttpResponse | null>(null);
 const loading = ref(false);
@@ -75,10 +76,9 @@ const activeTab = ref<"params" | "headers" | "body" | "auth" | "scripts">(
 
 // Remember the selected sub-tab so it survives top-level tab switches (remounts)
 watch(activeTab, (val) => {
-  const id = tabsStore.activeTab?.id;
+  const id = mountedTabId;
   if (id) tabsStore.setSubTab(id, val);
 });
-const scriptVariables = ref<Record<string, string>>({});
 const testResults = ref<TestResult[]>([]);
 const consoleLogs = ref<string[]>([]);
 const requestTitle = ref(props.initialTitle || "");
@@ -124,9 +124,8 @@ let mountedDraftId: string | null = null;
 
 // Get the draft for the current tab (for both new and existing requests)
 const currentDraftId = computed(() => {
-  const activeTab = tabsStore.activeTab;
-  if (!activeTab) return null;
-  const draft = tabsStore.drafts.find(d => d.tabId === activeTab.id);
+  if (!mountedTabId) return null;
+  const draft = tabsStore.drafts.find(d => d.tabId === mountedTabId);
   return draft?.id ?? null;
 });
 
@@ -148,31 +147,6 @@ watch(
   () => {
     if (currentDraftId.value) {
       tabsStore.markDirty(currentDraftId.value);
-    }
-  }
-);
-
-// Watch for tab switches to save the previous tab's draft before switching
-watch(
-  () => tabsStore.activeTabId,
-  () => {
-    // Save the draft we captured at mount time (this is the tab that's about to be hidden)
-    if (mountedDraftId) {
-      tabsStore.updateDraftState(mountedDraftId, { ...requestState });
-    }
-    // Update mountedDraftId for the new active tab
-    mountedDraftId = currentDraftId.value;
-
-    // Sync collectionId for the new active tab
-    const activeTab = tabsStore.activeTab;
-    if (activeTab) {
-      if (activeTab.requestId) {
-        const request = requestsStore.requests.find(r => r.id === activeTab.requestId);
-        selectedCollectionId.value = request?.collectionId || '';
-      } else {
-        // For new tabs, clear collectionId to force user selection
-        selectedCollectionId.value = '';
-      }
     }
   }
 );
@@ -244,28 +218,32 @@ onUnmounted(() => {
   document.removeEventListener("mouseup", stopDrag);
 });
 
-function buildRustAuth(auth: AuthConfig) {
+function buildRustAuth(auth: AuthConfig, variables: Record<string, string>) {
   if (auth.type === "none") return null;
-  const kind = auth.type === "api-key" ? "api-key" : auth.type;
+  const kind = auth.type;
   if (auth.type === "basic" && auth.basic) {
     return {
       kind,
-      username: auth.basic.username,
-      password: auth.basic.password,
+      username: replaceVariables(auth.basic.username, variables),
+      password: replaceVariables(auth.basic.password, variables),
     };
   }
   if (auth.type === "bearer" && auth.bearer) {
-    return { kind, token: auth.bearer.token };
+    return { kind, token: replaceVariables(auth.bearer.token, variables) };
   }
   if (auth.type === "api-key" && auth.apiKey) {
     return {
       kind,
-      key: auth.apiKey.key,
-      value: auth.apiKey.value,
+      key: replaceVariables(auth.apiKey.key, variables),
+      value: replaceVariables(auth.apiKey.value, variables),
       in_header: auth.apiKey.in === "header",
     };
   }
   return null;
+}
+
+function objectToKeyValues(values: Record<string, string>): KeyValuePair[] {
+  return Object.entries(values).map(([key, value]) => ({ key, value, enabled: true }));
 }
 
 function keyValueArrayToObject(
@@ -285,6 +263,24 @@ interface ReplaceResult {
   body: RequestBody
 }
 
+function parseFormBody(body: RequestBody): KeyValuePair[] {
+  let items: unknown;
+  try {
+    items = JSON.parse(body.content || "[]");
+  } catch {
+    throw new Error(t('request.invalidFormBody', { type: body.type }));
+  }
+  if (!Array.isArray(items) || items.some(item =>
+    item === null || typeof item !== 'object' ||
+    typeof item.key !== 'string' || typeof item.value !== 'string' ||
+    (item.enabled !== undefined && typeof item.enabled !== 'boolean') ||
+    (item.type !== undefined && item.type !== 'text' && item.type !== 'file')
+  )) {
+    throw new Error(t('request.invalidFormBody', { type: body.type }));
+  }
+  return items.map(item => ({ ...item, enabled: item.enabled ?? true }));
+}
+
 function applyVariableReplacement(
   variables: Record<string, string>,
   url: string,
@@ -292,38 +288,29 @@ function applyVariableReplacement(
   headers: KeyValuePair[],
   body: RequestBody,
 ): ReplaceResult {
-  let replacedBody =
-    body.type !== "none"
-      ? { ...body, content: replaceVariables(body.content, variables) }
-      : body;
-
-  if (
-    replacedBody.type === "form-data" ||
-    replacedBody.type === "x-www-form-urlencoded"
-  ) {
-    try {
-      const items = JSON.parse(replacedBody.content);
-      const filtered = items.filter(
-        (p: { key: string; enabled?: boolean }) =>
-          p.enabled !== false && p.key.trim() !== "",
-      );
-      replacedBody = { ...replacedBody, content: JSON.stringify(filtered) };
-    } catch {
-      // Invalid JSON, send as-is
-    }
+  let replacedBody = { ...body };
+  if (body.type === "form-data" || body.type === "x-www-form-urlencoded") {
+    // Replace each field after parsing so quotes/backslashes in variables
+    // cannot corrupt the JSON used to transport form entries.
+    const items = parseFormBody(body);
+    replacedBody.content = JSON.stringify(items
+      .filter(p => p.enabled !== false && p.key.trim() !== "")
+      .map(p => ({ ...p, key: replaceVariables(p.key, variables), value: replaceVariables(p.value, variables) })));
+  } else if (body.type !== "none") {
+    replacedBody.content = replaceVariables(body.content, variables);
   }
 
   return {
     url: replaceVariables(url, variables),
     params: params
-      .filter((p) => p.enabled)
+      .filter((p) => p.enabled !== false)
       .map((p) => ({
         ...p,
         key: replaceVariables(p.key, variables),
         value: replaceVariables(p.value, variables),
       })),
     headers: headers
-      .filter((h) => h.enabled)
+      .filter((h) => h.enabled !== false)
       .map((h) => ({
         ...h,
         key: replaceVariables(h.key, variables),
@@ -343,6 +330,7 @@ async function runPreRequestScript(
   body: RequestBody,
 ): Promise<{
   url: string
+  params: KeyValuePair[]
   headers: KeyValuePair[]
   body: RequestBody
   method: string | null
@@ -352,7 +340,7 @@ async function runPreRequestScript(
   const inputJson = JSON.stringify({
     script_type: "pre_request",
     script,
-    request: { method, url, params, headers, body },
+    request: { method, url, query_params: keyValueArrayToObject(params), headers: keyValueArrayToObject(headers), body: body.content },
     variables,
   });
   const scriptResultJson = await invoke<string>("execute_script", {
@@ -362,6 +350,7 @@ async function runPreRequestScript(
 
   const result = {
     url,
+    params,
     headers,
     body,
     method: null as string | null,
@@ -372,9 +361,15 @@ async function runPreRequestScript(
   if (scriptResult.modified_request) {
     const mod = scriptResult.modified_request;
     if (mod.method) result.method = mod.method;
-    if (mod.url) result.url = mod.url;
-    if (mod.headers) result.headers = mod.headers;
-    if (mod.body) result.body = mod.body;
+    if (mod.url !== undefined) result.url = mod.url;
+    if (mod.query_params) result.params = objectToKeyValues(mod.query_params);
+    if (mod.headers) result.headers = objectToKeyValues(mod.headers);
+    if (mod.body !== null && mod.body !== undefined) {
+      result.body = { type: body.type === "none" && mod.body ? "json" : body.type, content: mod.body };
+      if (result.body.type === "form-data" || result.body.type === "x-www-form-urlencoded") {
+        parseFormBody(result.body);
+      }
+    }
   }
 
   return result;
@@ -385,21 +380,21 @@ async function runTestScript(
   variables: Record<string, string>,
   method: string,
   url: string,
+  params: KeyValuePair[],
   headers: KeyValuePair[],
   body: RequestBody,
   responseStatus: number | null,
-  responseHeaders: Record<string, string> | Record<string, string[]> | null,
+  responseHeaders: Record<string, string[]> | null,
   responseBody: string | null,
   responseTime: number | null,
 ): Promise<{
   testResults: TestResult[]
   logs: string[]
-  returnedVariables: Record<string, string>
 }> {
   const testInputJson = JSON.stringify({
     script_type: "test",
     script,
-    request: { method, url, headers, body },
+    request: { method, url, query_params: keyValueArrayToObject(params), headers: keyValueArrayToObject(headers), body: body.content },
     response: {
       status: responseStatus,
       headers: responseHeaders,
@@ -416,7 +411,6 @@ async function runTestScript(
   return {
     testResults: testResult.test_results || [],
     logs: testResult.console_logs || [],
-    returnedVariables: testResult.variables || {},
   };
 }
 
@@ -433,36 +427,26 @@ async function sendRequest() {
   testResults.value = [];
 
   try {
-    const variables = effectiveVariables.value;
+    // Scripts share variables within this send only; always read fresh environment values.
+    let variables = { ...effectiveVariables.value };
+    let method: string = requestState.method;
+    let outgoing = {
+      url: requestState.url,
+      params: requestState.params,
+      headers: requestState.headers,
+      body: requestState.body,
+    };
+    consoleLogs.value = [];
 
-    // Replace variables
-    let { url: replacedUrl, params: replacedParams, headers: replacedHeaders, body: replacedBody } =
-      applyVariableReplacement(
-        variables,
-        requestState.url,
-        requestState.params,
-        requestState.headers,
-        requestState.body,
-      );
-
-    // Pre-request script
     if (requestState.preRequestScript) {
       try {
-        const allVariables = { ...variables, ...scriptVariables.value };
         const preResult = await runPreRequestScript(
-          requestState.preRequestScript,
-          allVariables,
-          requestState.method,
-          replacedUrl,
-          requestState.params,
-          replacedHeaders,
-          replacedBody,
+          requestState.preRequestScript, variables, method,
+          outgoing.url, outgoing.params, outgoing.headers, outgoing.body,
         );
-        if (preResult.method) requestState.method = preResult.method as HttpMethod;
-        if (preResult.url) replacedUrl = preResult.url;
-        if (preResult.headers) replacedHeaders = preResult.headers;
-        if (preResult.body) replacedBody = preResult.body;
-        scriptVariables.value = preResult.returnedVariables;
+        method = preResult.method || method;
+        outgoing = preResult;
+        variables = preResult.returnedVariables;
         consoleLogs.value = preResult.logs;
       } catch (e) {
         error.value = t('request.preRequestError', { message: e instanceof Error ? e.message : String(e) });
@@ -470,15 +454,18 @@ async function sendRequest() {
       }
     }
 
+    const { url: replacedUrl, params: replacedParams, headers: replacedHeaders, body: replacedBody } =
+      applyVariableReplacement(variables, outgoing.url, outgoing.params, outgoing.headers, outgoing.body);
+
     // Send request
     const result = await invoke<SendRequestResponse>("send_request", {
       input: {
-        method: requestState.method,
+        method,
         url: replacedUrl,
         query_params: keyValueArrayToObject(replacedParams),
         headers: keyValueArrayToObject(replacedHeaders),
         body: replacedBody.type !== "none" ? replacedBody : null,
-        auth: buildRustAuth(requestState.auth),
+        auth: buildRustAuth(requestState.auth, variables),
       },
     });
 
@@ -505,12 +492,12 @@ async function sendRequest() {
     // Test script
     if (requestState.testScript) {
       try {
-        const allTestVariables = { ...variables, ...scriptVariables.value };
         const testResult = await runTestScript(
           requestState.testScript,
-          allTestVariables,
-          requestState.method,
+          variables,
+          method,
           replacedUrl,
+          replacedParams,
           replacedHeaders,
           replacedBody,
           result.status,
@@ -521,9 +508,6 @@ async function sendRequest() {
         testResults.value = testResult.testResults;
         if (testResult.logs.length > 0) {
           consoleLogs.value = [...consoleLogs.value, ...testResult.logs];
-        }
-        if (testResult.returnedVariables) {
-          scriptVariables.value = testResult.returnedVariables;
         }
       } catch (e) {
         testResults.value = [
@@ -544,7 +528,7 @@ async function sendRequest() {
 
 function safeDecode(s: string): string {
   try {
-    return decodeURIComponent(s);
+    return decodeURIComponent(s.replace(/\+/g, " "));
   } catch {
     return s;
   }
@@ -569,10 +553,9 @@ function handleUrlUpdate(url: string) {
       return params;
     }, [] as KeyValuePair[]);
 
-    // Merge with existing params (avoid duplicates by key)
-    const existingKeys = new Set(requestState.params.map((p) => p.key));
-    const uniqueNewParams = newParams.filter((p) => !existingKeys.has(p.key));
-    requestState.params = [...requestState.params, ...uniqueNewParams];
+    // Values explicitly pasted in the URL replace matching editor entries.
+    const newKeys = new Set(newParams.map(p => p.key));
+    requestState.params = [...requestState.params.filter(p => !newKeys.has(p.key)), ...newParams];
 
     requestState.url = baseUrl;
   } else {
